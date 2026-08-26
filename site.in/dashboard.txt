@@ -1,10 +1,47 @@
 <h1>Dashboard</h1>
 
 <p>
-Live state from the owning host, captured by a project-provided
-<code>scripts/site-state-fetch.sh</code> (see the homelab project pages
-conventions: standard page set). This skeleton ships a placeholder; a real
-project replaces this page with live values.
+Live state captured by <code>scripts/site-state-fetch.sh</code>.
+Values are a point-in-time snapshot; refresh by re-running the fetch and rebuild.
 </p>
 
-<p>Live state: not configured.</p>
+<h2>Repository</h2>
+
+<table>
+  <tr><th>Item</th><th>Value</th></tr>
+  <tr><td>Branch</td><td>__BRANCH__</td></tr>
+  <tr><td>Commit</td><td><code>__COMMIT__</code></td></tr>
+</table>
+
+<h2>Datasets volume</h2>
+
+<table>
+  <tr><th>Item</th><th>Value</th></tr>
+  <tr><td>Datasets recorded in manifest</td><td>__MANIFEST_COUNT__</td></tr>
+  <tr><td>Volume total</td><td>__VOLUME_TOTAL__</td></tr>
+  <tr><td>Volume used</td><td>__VOLUME_USED__</td></tr>
+  <tr><td>Volume free</td><td>__VOLUME_FREE__</td></tr>
+</table>
+
+<h2>ETOPO 2022 (the render source)</h2>
+
+<table>
+  <tr><th>Item</th><th>Value</th></tr>
+  <tr><td>Download date</td><td>__ETOPO_DATE__</td></tr>
+  <tr><td>Resolution</td><td>__ETOPO_RESOLUTION__</td></tr>
+  <tr><td>GeoTIFF tiles</td><td>__ETOPO_FILES__</td></tr>
+  <tr><td>Size</td><td>__ETOPO_SIZE__</td></tr>
+</table>
+
+<h2>STL tile set (dataflow.out/stl/)</h2>
+
+<table>
+  <tr><th>Item</th><th>Value</th></tr>
+  <tr><td>Tiles rendered</td><td>__STL_TILE_COUNT__</td></tr>
+  <tr><td>Total size</td><td>__STL_TILES_SIZE__</td></tr>
+  <tr><td>Build timestamp</td><td>__STL_BUILD_TIMESTAMP__</td></tr>
+  <tr><td>Band height (degrees)</td><td>__STL_BAND_DEGREES__</td></tr>
+  <tr><td>Globe radius (mm)</td><td>__STL_RADIUS_MM__</td></tr>
+</table>
+
+<p>Fetched: __FETCHED__</p>

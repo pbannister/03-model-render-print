@@ -10,6 +10,8 @@ The Site Build feature provides the script that converts `site.in/` into `site.o
 
 - `scripts/site-build.sh` must generate the static site in `site.out/` from the input in `site.in/`.
 - Each `site.in/*.txt` input file must produce `site.out/<name>.html`.
+- Every non-`.txt`, non-`template.html` file under `site.in/` (authored assets such as scripts, styles, and images) must be copied verbatim into `site.out/`.
+- Pages may contain `__KEY__` placeholders for live state; values come from the state file (`dataflow.out/site-state.txt` by default, overridable with `SITE_STATE_FILE`), written by `scripts/site-state-fetch.sh`. When the state file is absent, remaining placeholders render as "unavailable", so the build stays portable.
 - Generated output must be identified as generated.
 - The script must accept optional input and output directory arguments.
 - When no arguments are given, the script must use `site.in/` and `site.out/` relative to the repository root.
@@ -19,7 +21,7 @@ The Site Build feature provides the script that converts `site.in/` into `site.o
 
 ## Behavior
 
-- Running the script recreates `site.out/` from `site.in/`.
+- Running the script recreates `site.out/` from `site.in/` (pages and assets).
 - Re-running the script overwrites existing output deterministically.
 
 ## Dependencies

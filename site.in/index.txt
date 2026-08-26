@@ -1,14 +1,48 @@
-<h1>Project status</h1>
+<h1>Model Render Print</h1>
 
 <p>
-What this project is, its current status, and how it works. This is the
-standard status page (<code>index.html</code>) from the homelab project
-pages conventions.
+Printable 3D models of the Earth rendered from the global elevation
+model (GDEM) data on the shared <code>/datasets</code> volume — the
+ETOPO 2022 global relief model maintained by the
+<code>model-elevation-earth</code> project.
 </p>
 
 <h2>Status</h2>
 
 <ul>
   <li>Status: active.</li>
-  <li>What's working: the skeleton site build.</li>
+  <li>Data source: ETOPO 2022 (land elevation + seafloor bathymetry),
+      15-arcsecond GeoTIFF tiles on <code>/datasets/dataset-etopo-2022/</code>.</li>
+  <li>Goal: render the Earth's surface as STL tile models that load into a
+      slicer (OrcaSlicer, PrusaSlicer) and print on a 3D printer.</li>
+  <li>Live dataset and tile state: see the dashboard.</li>
+</ul>
+
+<h2>How it works</h2>
+
+<p>
+The project reads the GDEM tiles from the shared datasets volume, divides
+the globe into roughly equal-size tiles along lines of latitude and
+longitude (single round tiles at the poles), and renders each tile as a
+binary STL with a flat bottom that sits against the printer bed. The
+approach is decided in <code>documents/05-stl-approach.md</code>.
+</p>
+
+<h2>Printing workflow</h2>
+
+<ul>
+  <li><code>make build</code> renders the tile set into
+      <code>dataflow.out/stl/</code> with <code>manifest.json</code>.</li>
+  <li><code>make check</code> validates every tile (watertight, flat bottom,
+      expected bounds).</li>
+  <li>Load one tile into your slicer; millimeters, z = 0 is the bed plane.</li>
+  <li>Use <code>--tiles</code> or <code>--region</code> to render a subset.</li>
+</ul>
+
+<h2>Documentation</h2>
+
+<ul>
+  <li>STL approach: <code>documents/05-stl-approach.md</code></li>
+  <li>Data source: <code>/datasets/manifest.yml</code> (etopo-2022)</li>
+  <li>Records: <code>records/</code></li>
 </ul>
