@@ -1,0 +1,14 @@
+<h1>Project status</h1>
+
+<p>
+What this project is, its current status, and how it works. This is the
+standard status page (<code>index.html</code>) from the homelab project
+pages conventions.
+</p>
+
+<h2>Status</h2>
+
+<ul>
+  <li>Status: active.</li>
+  <li>What's working: the skeleton site build.</li>
+</ul>

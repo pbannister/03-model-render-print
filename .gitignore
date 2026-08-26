@@ -1,0 +1,12 @@
+
+.aider.chat.history.md
+.aider.input.history
+.aider.tags.cache.*
+__pycache__/
+dataflow.out/*
+logs/*
+site.out/*
+
+!dataflow.out/.gitkeep
+!logs/.gitkeep
+!site.out/.gitkeep
