@@ -283,5 +283,23 @@ publish_tree "$REPOSITORY_ROOT/documents"
 map_tree 'Records' "$REPOSITORY_ROOT/records" "$DIRECTORY_OUTPUT/records.html"
 publish_tree "$REPOSITORY_ROOT/records"
 
+# --- phase.txt (machine-readable project phase for the homelab index) ------
+# Reads PHASES.md ("Current: phase N — state") and writes site.out/phase.txt
+# as KEY=VALUE lines (PHASE=N, PHASE_STATE=state). The homelab fetch stages
+# this file and the site merges it with the registry activity status.
+FILE_PHASES="$REPOSITORY_ROOT/PHASES.md"
+if [ -f "$FILE_PHASES" ]; then
+    phase_current=$(sed -n 's/^Current: phase \([0-9][0-9]*\) *— *\([a-z-]*\)$/\1 \2/p' "$FILE_PHASES" | head -1)
+    if [ -n "$phase_current" ]; then
+        phase_num=${phase_current% *}
+        phase_state=${phase_current#* }
+        {
+            echo "PHASE=$phase_num"
+            echo "PHASE_STATE=$phase_state"
+        } > "$DIRECTORY_OUTPUT/phase.txt"
+        echo "site-condense: wrote phase.txt (phase $phase_num, $phase_state)"
+    fi
+fi
+
 echo "site-condense: built todo.html, prompts.html, documents.html, records.html + full-text pages into $DIRECTORY_OUTPUT"
 exit 0
