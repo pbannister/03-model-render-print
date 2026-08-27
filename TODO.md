@@ -37,6 +37,12 @@
 
 ## Recently Completed
 
+* [x] Re-orient the alignment keys vertically (2026-08-26): the first
+      horizontal ridge keys printed with a great deal of supports, so the
+      keys are now vertical fins and grooves (north/east fins, south/west
+      grooves, grooved cap rings) that run from the top edge down the
+      wall. Every key surface is near-vertical, so the tiles print
+      support-free.
 * [x] Add tile assembly features (2026-08-26): chamfered walls through the
       globe center (each wall plane contains the center, so assembled
       neighbors' walls are coplanar), stud/socket alignment channels

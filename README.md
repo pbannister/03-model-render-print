@@ -81,9 +81,9 @@ All project features are defined in `prompts/features/` and implemented in `sour
   seafloor relief.
 - Load one tile (or a region) into a slicer. Tiles are millimeters, origin
   at the tile's flat bottom (z = 0 is the bed plane). The tile id is
-  engraved on the underside; the north/east walls carry studs and the
-  south/west walls sockets (polar-cap rings are socketed), so assembled
-  neighbors lock together.
+  engraved on the underside; the north/east walls carry vertical fins and
+  the south/west walls vertical grooves (polar-cap rings are grooved), so
+  assembled neighbors lock together and the keys print without supports.
 - `make check` re-validates every generated tile (watertight, flat bottom,
   expected size) without rebuilding.
 - The full globe at the default 30-degree banding is 42 tiles; use

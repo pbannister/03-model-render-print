@@ -27,10 +27,11 @@ and prints on a 3D printer.
   relief, and neighboring tiles sample the same geographic boundary.
 - The side walls must be chamfered so each wall plane contains the globe
   center, so the walls of assembled neighbors are coplanar.
-- Alignment keys: north and east walls carry studs, south and west walls
-  carry sockets, polar-cap rings carry a socket groove; a stud is placed
-  only when its mating socket exists, so every stud meets a socket in the
-  assembled globe.
+- Alignment keys: north and east walls carry vertical fins, south and west
+  walls carry vertical grooves, polar-cap rings carry grooves; a fin is
+  placed only when its mating groove exists, so every fin meets a groove
+  in the assembled globe. The keys must be vertical (running from the top
+  edge down the wall) so they print without supports.
 - The underside must carry an engraved (recessed) tile id; z = 0 must stay
   the lowest plane.
 - Elevation must be mapped with a global (not per-tile) range, so all tiles

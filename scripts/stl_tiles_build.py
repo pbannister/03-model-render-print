@@ -304,15 +304,12 @@ def quad_triangles(point_a, point_b, point_c, point_d):
     return [(point_a, point_b, point_c), (point_a, point_c, point_d)]
 
 
-KEY_MIN_WIDTH_MM = 6.5        # minimum wall height that hosts a channel
-                             # (socket depth 2.6 needs width >= ~6.4)
-KEY_STUD_D_LOW_MM = 0.95      # stud v-range, distance below the top edge
-KEY_STUD_D_HIGH_MM = 3.45
-KEY_SOCKET_D_LOW_MM = 0.65    # socket v-range (stud plus clearance)
-KEY_SOCKET_D_HIGH_MM = 3.75
-KEY_STUD_HEIGHT_MM = 2.0      # stud protrusion from the wall plane
-KEY_SOCKET_DEPTH_MM = 2.6     # socket depth (stud plus engagement slack)
-KEY_V_LIMIT = 0.03            # channel v-fraction clamp
+KEY_MIN_WIDTH_MM = 6.5        # minimum wall height that hosts a key
+KEY_STUD_WIDTH_MM = 3.0       # fin width along the edge
+KEY_STUD_HEIGHT_MM = 2.0      # fin protrusion from the wall plane
+KEY_SOCKET_WIDTH_MM = 3.6     # groove width along the edge (fin + clearance)
+KEY_SOCKET_DEPTH_MM = 2.6     # groove depth (fin plus engagement slack)
+KEY_V_END = 1.0 - (KEY_SOCKET_DEPTH_MM + 0.5) / KEY_MIN_WIDTH_MM
 GROOVE_DEPTH_MM = 0.6         # underside mark groove depth
 
 
@@ -321,9 +318,9 @@ def key_plan_for_tile(tile, band_degrees):
 
     North and east walls carry studs; south and west carry sockets, except
     the pole-side south edge of the band adjacent to the south cap, which
-    carries a stud (it mates the cap's socketed ring).  Cap tiles carry a
-    socket around the whole ring.  Final placement is decided pair-aware
-    by channel_decisions().
+    carries a stud (it mates the cap's socketed ring).  Cap tiles carry
+    sockets on the ring.  Final placement is decided pair-wise by
+    key_decisions().
     """
     if tile["is_cap"]:
         return [{"edge": "ring", "kind": "socket"}]
@@ -342,35 +339,50 @@ def key_plan_for_tile(tile, band_degrees):
 def boundary_ring(tile, top, latitudes, longitudes):
     """The top-surface boundary ring and its wall-edge descriptors.
 
-    Returns (boundary, edges): boundary is the ordered boundary points;
-    edges maps edge names to (start, count) index spans in boundary space,
-    where wall quad j spans boundary[j] .. boundary[(j + 1) % len].
-    Band tiles get south/east/north/west; caps get 'ring'.
+    Returns (boundary, edges, lats, lons): boundary is the ordered
+    boundary points; edges maps edge names to (start, count) index spans
+    in boundary space, where wall quad j spans boundary[j] ..
+    boundary[(j + 1) % len]; lats/lons give each boundary sample's
+    geographic position.  Band tiles get south/east/north/west; caps get
+    'ring'.
     """
     count_lat = len(latitudes) - 1
     if tile["is_cap"]:
         count_lon = len(longitudes)
         # the ring row is the end of the latitude grid nearest the equator
         ring_row = 0 if abs(latitudes[0]) < abs(latitudes[-1]) else count_lat
+        ring_lat = latitudes[ring_row]
         boundary = [top[ring_row][col] for col in range(count_lon)]
-        return boundary, {"ring": (0, count_lon)}
+        lats = [ring_lat for _ in range(count_lon)]
+        lons = [longitudes[col] for col in range(count_lon)]
+        return boundary, {"ring": (0, count_lon)}, lats, lons
     count_lon = len(longitudes) - 1
     boundary = []
+    lats = []
+    lons = []
     for col in range(count_lon + 1):
         boundary.append(top[0][col])
+        lats.append(latitudes[0])
+        lons.append(longitudes[col])
     for row in range(1, count_lat + 1):
         boundary.append(top[row][count_lon])
+        lats.append(latitudes[row])
+        lons.append(longitudes[count_lon])
     for col in range(count_lon - 1, -1, -1):
         boundary.append(top[count_lat][col])
+        lats.append(latitudes[count_lat])
+        lons.append(longitudes[col])
     for row in range(count_lat - 1, 0, -1):
         boundary.append(top[row][0])
+        lats.append(latitudes[row])
+        lons.append(longitudes[0])
     edges = {
         "south": (0, count_lon),
         "east": (count_lon, count_lat),
         "north": (count_lon + count_lat, count_lon),
         "west": (count_lon + count_lat + count_lon, count_lat - 1),
     }
-    return boundary, edges
+    return boundary, edges, lats, lons
 
 
 def top_grid(tile, latitudes, longitudes, elevation_mm, radius_mm, frame):
@@ -388,226 +400,272 @@ def top_grid(tile, latitudes, longitudes, elevation_mm, radius_mm, frame):
     return top
 
 
-def edge_mid_widths(boundary, edges, z_bottom):
-    """Per-edge mid-quad wall widths; the ring reports its minimum."""
-    widths = {}
-    for name, (start, count) in edges.items():
-        mid = start + count // 2
-        p_a = boundary[mid % len(boundary)]
-        p_b = boundary[(mid + 1) % len(boundary)]
-        q_a = radial_projection(p_a, z_bottom)
-        q_b = radial_projection(p_b, z_bottom)
-        width = (vec_len(vec_sub(p_a, q_a)) + vec_len(vec_sub(p_b, q_b))) / 2.0
-        if name == "ring":
-            minimum = width
-            for j in range(start, start + count):
-                pa = boundary[j % len(boundary)]
-                pb = boundary[(j + 1) % len(boundary)]
-                qa = radial_projection(pa, z_bottom)
-                qb = radial_projection(pb, z_bottom)
-                minimum = min(minimum, (vec_len(vec_sub(pa, qa))
-                                        + vec_len(vec_sub(pb, qb))) / 2.0)
-            widths[name] = minimum
-        else:
-            widths[name] = width
-    return widths
+def sample_widths(boundary, z_bottom):
+    """Wall height (|p - q|) at every boundary sample."""
+    return [vec_len(vec_sub(point, radial_projection(point, z_bottom)))
+            for point in boundary]
 
 
-def channel_decisions(tiles, widths_by_tile, band_degrees):
-    """Pair-aware stud/socket placement per tile edge.
+def key_decisions(tiles, geometry, band_degrees):
+    """Pair-wise vertical key placement.
 
-    A socket is placed when the tile's own wall at the edge midpoint is
-    tall enough.  A stud is placed only when the tile's own wall is tall
-    enough AND the mating socket exists (the neighbor's socket or the
-    polar cap's ring socket), so every stud meets a socket in the
-    assembled globe.
+    A stud (fin) is placed on an edge only where its mating socket
+    (groove) exists, so every fin meets a groove in the assembled globe:
+    the east fin mates the east neighbor's west groove, the north fin
+    mates the above tile's south groove (or the north cap's ring), and the
+    pole-side south fin mates the south cap's ring.  Both wall heights at
+    the key position must be tall enough.  Sockets are derived from the
+    neighbors' fins so stud and socket always share one position.
+
+    geometry maps tile ids to {"widths": per-sample wall heights,
+    "edges": edge spans, "lats"/"lons": sample positions}.  Returns
+    {tile_id: [{"edge": name, "kind": kind, "index": boundary index}]}.
     """
-    def ring_width_for(tile):
-        if tile["lat_max"] == 90.0:
-            return widths_by_tile.get("tile-N90", {}).get("ring")
-        return widths_by_tile.get("tile-S90", {}).get("ring")
+    decisions = {tile["id"]: [] for tile in tiles}
 
-    def above_south_width(tile):
-        if tile["lat_max"] == 90.0 - band_degrees:
-            # the pole-side north edge mates the north cap's ring socket
-            return widths_by_tile.get("tile-N90", {}).get("ring")
+    def geom(tile):
+        return geometry[tile["id"]]
+
+    def width_at(tile, edge_name, index):
+        start, count = geom(tile)["edges"][edge_name]
+        if not (start <= index < start + count):
+            return None
+        return geom(tile)["widths"][index]
+
+    def mid_index(tile, edge_name):
+        start, count = geom(tile)["edges"][edge_name]
+        return start + count // 2
+
+    def sample_near(tile, edge_name, lat, lon):
+        start, count = geom(tile)["edges"][edge_name]
+        best = None
+        best_d = None
+        for j in range(start, start + count):
+            d_lat = geom(tile)["lats"][j] - lat
+            d_lon = geom(tile)["lons"][j] - lon
+            d = d_lat * d_lat + d_lon * d_lon
+            if best_d is None or d < best_d:
+                best_d = d
+                best = j
+        return best
+
+    def mate_width(tile, edge_name, index):
+        if edge_name == "east":
+            lon_end = tile["lon_max"]
+            if lon_end >= 360.0:
+                lon_end = 0.0
+            for other in tiles:
+                if other["is_cap"] or other["lat_min"] != tile["lat_min"]:
+                    continue
+                if other["lon_min"] == lon_end:
+                    return width_at(other, "west", mid_index(other, "west"))
+            return None
+        if edge_name == "north":
+            mid_lon = (tile["lon_min"] + tile["lon_max"]) / 2.0
+            if tile["lat_max"] == 90.0 - band_degrees:
+                cap = next(t for t in tiles if t["id"] == "tile-N90")
+                return width_at(cap, "ring",
+                                sample_near(cap, "ring", 90.0, mid_lon))
+            for other in tiles:
+                if other["is_cap"] or other["lat_min"] != tile["lat_max"]:
+                    continue
+                if other["lon_min"] <= mid_lon < other["lon_max"]:
+                    return width_at(other, "south",
+                                    sample_near(other, "south",
+                                                tile["lat_max"], mid_lon))
+            return None
+        # the pole-side south fin mates the south cap's ring
+        cap = next(t for t in tiles if t["id"] == "tile-S90")
         mid_lon = (tile["lon_min"] + tile["lon_max"]) / 2.0
-        for other in tiles:
-            if other["is_cap"] or other["lat_min"] != tile["lat_max"]:
-                continue
-            if other["lon_min"] <= mid_lon < other["lon_max"]:
-                return widths_by_tile[other["id"]]["south"]
-        return None
+        return width_at(cap, "ring",
+                        sample_near(cap, "ring", -90.0, mid_lon))
 
-    def east_neighbor_west_width(tile):
-        lon_end = tile["lon_max"]
-        if lon_end >= 360.0:
-            lon_end = 0.0
+    def fins_placed(tile_id):
+        return [key for key in decisions[tile_id] if key["kind"] == "stud"]
+
+    # pass A: the fins, from the mating socket's wall height
+    for tile in tiles:
+        if tile["is_cap"]:
+            continue
+        for edge in ("east", "north"):
+            index = mid_index(tile, edge)
+            own = width_at(tile, edge, index)
+            mate = mate_width(tile, edge, index)
+            if own is not None and own >= KEY_MIN_WIDTH_MM \
+                    and mate is not None and mate >= KEY_MIN_WIDTH_MM:
+                decisions[tile["id"]].append(
+                    {"edge": edge, "kind": "stud", "index": index})
+        if tile["lat_min"] == -90.0 + band_degrees:
+            index = mid_index(tile, "south")
+            own = width_at(tile, "south", index)
+            mate = mate_width(tile, "south", index)
+            if own is not None and own >= KEY_MIN_WIDTH_MM \
+                    and mate is not None and mate >= KEY_MIN_WIDTH_MM:
+                decisions[tile["id"]].append(
+                    {"edge": "south", "kind": "stud", "index": index})
+
+    # pass B: the grooves, derived from the neighbors' fins
+    for tile in tiles:
+        if tile["is_cap"]:
+            adjacent_lat = (90.0 - band_degrees
+                            if tile["lat_max"] == 90.0 else -90.0 + band_degrees)
+            for other in tiles:
+                if other["is_cap"]:
+                    continue
+                adjacent = (other["lat_max"] == adjacent_lat
+                            if tile["lat_max"] == 90.0
+                            else other["lat_min"] == adjacent_lat)
+                if not adjacent:
+                    continue
+                pole_edge = "north" if tile["lat_max"] == 90.0 else "south"
+                fin = next((k for k in fins_placed(other["id"])
+                            if k["edge"] == pole_edge), None)
+                if fin is None:
+                    continue
+                mid_lon = (other["lon_min"] + other["lon_max"]) / 2.0
+                ring_index = sample_near(tile, "ring",
+                                         other["lat_max"]
+                                         if pole_edge == "north"
+                                         else other["lat_min"], mid_lon)
+                decisions[tile["id"]].append(
+                    {"edge": "ring", "kind": "socket", "index": ring_index})
+            continue
+        lon_min = tile["lon_min"]
         for other in tiles:
             if other["is_cap"]:
                 continue
-            if other["lat_min"] == tile["lat_min"] and other["lon_min"] == lon_end:
-                return widths_by_tile[other["id"]]["west"]
-        return None
-
-    decisions = {}
-    for tile in tiles:
-        widths = widths_by_tile[tile["id"]]
-        if tile["is_cap"]:
-            width_ring = widths.get("ring")
-            decisions[tile["id"]] = {
-                "ring": "socket" if (width_ring is not None
-                                     and width_ring >= KEY_MIN_WIDTH_MM) else None,
-            }
-            continue
-        decision = {"south": None, "west": None, "north": None, "east": None}
-        for edge in ("south", "west"):
-            if widths[edge] >= KEY_MIN_WIDTH_MM:
-                decision[edge] = "socket"
-        for edge, mate in (("north", above_south_width(tile)),
-                           ("east", east_neighbor_west_width(tile))):
-            if widths[edge] >= KEY_MIN_WIDTH_MM and mate is not None \
-                    and mate >= KEY_MIN_WIDTH_MM:
-                decision[edge] = "stud"
-        if tile["lat_min"] == -90.0 + band_degrees:
-            mate = ring_width_for(tile)
-            if widths["south"] >= KEY_MIN_WIDTH_MM and mate is not None \
-                    and mate >= KEY_MIN_WIDTH_MM:
-                decision["south"] = "stud"
-        decisions[tile["id"]] = decision
+            if other["lat_min"] == tile["lat_min"] \
+                    and other["lon_max"] % 360.0 == lon_min % 360.0:
+                fin = next((k for k in fins_placed(other["id"])
+                            if k["edge"] == "east"), None)
+                if fin is not None:
+                    decisions[tile["id"]].append(
+                        {"edge": "west", "kind": "socket",
+                         "index": mid_index(tile, "west")})
+        for other in tiles:
+            if other["is_cap"] or other["lat_max"] != tile["lat_min"]:
+                continue
+            if not (other["lon_max"] > tile["lon_min"]
+                    and other["lon_min"] < tile["lon_max"]):
+                continue
+            fin = next((k for k in fins_placed(other["id"])
+                        if k["edge"] == "north"), None)
+            if fin is None:
+                continue
+            mid_lon = (other["lon_min"] + other["lon_max"]) / 2.0
+            south_index = sample_near(tile, "south", tile["lat_min"], mid_lon)
+            decisions[tile["id"]].append(
+                {"edge": "south", "kind": "socket", "index": south_index})
     return decisions
 
 
-def channel_parameters(p_a, p_b, q_a, q_b, kind, interior_direction):
-    """(v_low, v_high, offset_mm, direction) for one channel, computed from
-    the mid quad of the edge and applied to every quad of the edge, so the
-    strip split stays continuous across the quads."""
+def key_geometry(p_a, p_b, q_a, q_b, kind, interior_direction):
+    """(offset_mm, direction) for a fin (stud) or groove (socket)."""
     normal = wall_plane_normal(p_a, p_b, interior_direction)
-    width = (vec_len(vec_sub(p_a, q_a)) + vec_len(vec_sub(p_b, q_b))) / 2.0
     if kind == "stud":
-        d_low, d_high = KEY_STUD_D_LOW_MM, KEY_STUD_D_HIGH_MM
-        offset_mm = KEY_STUD_HEIGHT_MM
-        direction = normal
-    else:
-        d_low, d_high = KEY_SOCKET_D_LOW_MM, KEY_SOCKET_D_HIGH_MM
-        offset_mm = KEY_SOCKET_DEPTH_MM
-        direction = (-normal[0], -normal[1], -normal[2])
-    v_low = max(KEY_V_LIMIT, min(1.0 - KEY_V_LIMIT, d_low / width))
-    v_high = max(KEY_V_LIMIT, min(1.0 - KEY_V_LIMIT, d_high / width))
-    return v_low, v_high, offset_mm, direction
+        return KEY_STUD_HEIGHT_MM, normal
+    return KEY_SOCKET_DEPTH_MM, (-normal[0], -normal[1], -normal[2])
 
 
-def channel_quad_triangles(p_a, p_b, q_a, q_b, name, v_low, v_high,
-                           offset_mm, direction, end_low, end_high):
-    """Strip and bar surfaces for one channel quad.
+def key_quad_triangles(p_a, p_b, q_a, q_b, kind, offset_mm, direction,
+                       side_low, side_high):
+    """Vertical fin/groove surfaces for one keyed quad.
 
-    end_low and end_high are (v_low_point, v_high_point) pairs on the
-    quad's left (u = 0) and right (u = 1) edges, for the bar end faces;
-    None when the quad is not a channel end.
+    The wall's upper part (v in [0, KEY_V_END]) is replaced by the fin or
+    groove; the lower part stays.  side_low/side_high flag the quads at
+    the key's along-edge ends, which carry the end faces.
     """
     def shift(point):
         return (point[0] + offset_mm * direction[0],
                 point[1] + offset_mm * direction[1],
                 point[2] + offset_mm * direction[2])
 
+    point_tl = bilinear_point(p_a, p_b, q_a, q_b, 0.0, KEY_V_END)
+    point_tr = bilinear_point(p_a, p_b, q_a, q_b, 1.0, KEY_V_END)
     triangles = []
-    point_tl = bilinear_point(p_a, p_b, q_a, q_b, 0.0, v_low)
-    point_th = bilinear_point(p_a, p_b, q_a, q_b, 0.0, v_high)
-    point_bl = bilinear_point(p_a, p_b, q_a, q_b, 1.0, v_low)
-    point_bh = bilinear_point(p_a, p_b, q_a, q_b, 1.0, v_high)
-    triangles.extend(quad_triangles(p_a, p_b, point_bl, point_tl))
-    triangles.extend(quad_triangles(point_th, point_bh, q_b, q_a))
-    triangles.extend(quad_triangles(point_tl, point_bl,
-                                    shift(point_bl), shift(point_tl)))
-    triangles.extend(quad_triangles(point_th, point_bh,
-                                    shift(point_bh), shift(point_th)))
-    triangles.extend(quad_triangles(shift(point_tl), shift(point_bl),
-                                    shift(point_bh), shift(point_th)))
-    if name != "ring":
-        if end_low is not None:
-            triangles.extend(quad_triangles(
-                end_low[0], end_low[1], shift(end_low[1]), shift(end_low[0])))
-        if end_high is not None:
-            triangles.extend(quad_triangles(
-                end_high[0], end_high[1], shift(end_high[1]), shift(end_high[0])))
+    # the lower part of the wall stays
+    triangles.extend(quad_triangles(point_tl, point_tr, q_b, q_a))
+    # the fin outer face / groove floor
+    triangles.extend(quad_triangles(shift(p_a), shift(p_b),
+                                    shift(point_tr), shift(point_tl)))
+    # the top face at the top edge
+    triangles.extend(quad_triangles(p_a, p_b, shift(p_b), shift(p_a)))
+    # the bottom end face at KEY_V_END
+    triangles.extend(quad_triangles(point_tl, point_tr,
+                                    shift(point_tr), shift(point_tl)))
+    if side_low:
+        triangles.extend(quad_triangles(p_a, point_tl,
+                                        shift(point_tl), shift(p_a)))
+    if side_high:
+        triangles.extend(quad_triangles(p_b, point_tr,
+                                        shift(point_tr), shift(p_b)))
     return triangles
 
 
-def wall_triangles(boundary, edges, channels, z_bottom, interior_direction):
-    """Wall quads chamfered through the globe center, with stud/socket
-    channels along the middle of each decided edge.
+def wall_triangles(boundary, edges, keys, z_bottom, interior_direction):
+    """Wall quads chamfered through the globe center, with vertical
+    fin/groove alignment keys where decided.
 
-    The corner quads stay plain so the two edges meeting at a corner never
-    disagree about the shared corner line.  Returns (triangles, planes,
-    keys_placed)."""
+    The keys are vertical (they run from the top edge down the wall), so
+    every key surface is near-vertical and prints without supports.
+    Returns (triangles, planes, keys_placed)."""
     n = len(boundary)
-    channel_specs = {}
-    quad_channel = {}
-    keys_placed = []
-    for name, kind in channels.items():
-        if kind is None or name not in edges:
-            continue
+    quad_key = {}
+    key_specs = []
+    for key in keys:
+        name = key["edge"]
+        kind = key["kind"]
+        index = key["index"]
         start, count = edges[name]
         if count < 5:
             continue
-        mid = (start + count // 2) % n
-        p_a = boundary[mid]
-        p_b = boundary[(mid + 1) % n]
+        p_a = boundary[index % n]
+        p_b = boundary[(index + 1) % n]
         q_a = radial_projection(p_a, z_bottom)
         q_b = radial_projection(p_b, z_bottom)
-        v_low, v_high, offset_mm, direction = channel_parameters(
-            p_a, p_b, q_a, q_b, kind, interior_direction)
-        if v_high - v_low < 0.05:
-            continue
-        channel_specs[name] = {
-            "kind": kind, "v_low": v_low, "v_high": v_high,
-            "offset_mm": offset_mm, "direction": direction,
-            "start": start, "count": count,
-        }
+        offset_mm, direction = key_geometry(p_a, p_b, q_a, q_b, kind,
+                                            interior_direction)
+        width_quad = vec_len(vec_sub(p_b, p_a))
+        half = max(1, int(round((KEY_STUD_WIDTH_MM if kind == "stud"
+                                  else KEY_SOCKET_WIDTH_MM)
+                                / (2.0 * width_quad))))
         if name == "ring":
-            for j in range(start, start + count):
-                quad_channel[j % n] = name
+            k0 = (index - half) % n
+            k1 = (index + half - 1) % n
         else:
-            for j in range(start + 1, start + count - 1):
-                quad_channel[j % n] = name
-        keys_placed.append({"edge": name, "kind": kind})
+            k0 = max(start + 1, index - half)
+            k1 = min(start + count - 2, index + half - 1)
+        if k1 - k0 < 2:
+            continue
+        spec = {
+            "kind": kind, "edge": name, "k0": k0, "k1": k1,
+            "offset_mm": offset_mm, "direction": direction,
+        }
+        for j in range(k0, k1 + 1):
+            quad_key[j % n] = spec
+        key_specs.append(spec)
 
-    def channel_end_points(spec, quad, u):
-        p_a = boundary[quad]
-        p_b = boundary[(quad + 1) % n]
-        q_a = radial_projection(p_a, z_bottom)
-        q_b = radial_projection(p_b, z_bottom)
-        return (bilinear_point(p_a, p_b, q_a, q_b, u, spec["v_low"]),
-                bilinear_point(p_a, p_b, q_a, q_b, u, spec["v_high"]))
-
-    def corner_fan(j, name, side):
-        """Triangulate a plain corner quad adjacent to a channel, with the
-        shared edge subdivided at the channel's end-face points."""
-        spec = channel_specs[name]
-        start, count = spec["start"], spec["count"]
+    def transition(j, spec, side):
+        """Plain quad adjacent to a key, with the shared edge subdivided
+        at KEY_V_END (fan from the opposite vertex)."""
         p_a = boundary[j]
         p_b = boundary[(j + 1) % n]
         q_a = radial_projection(p_a, z_bottom)
         q_b = radial_projection(p_b, z_bottom)
-        if side == "start":
-            s1, s2 = channel_end_points(spec, start + 1, 0.0)
-            return [(p_a, p_b, s1), (p_a, s1, s2), (p_a, s2, q_b),
-                    (p_a, q_b, q_a)]
-        s1, s2 = channel_end_points(spec, start + count - 2, 1.0)
-        return [(p_b, p_a, s1), (p_b, s1, s2), (p_b, s2, q_a),
-                (p_b, q_a, q_b)]
+        if side == "low":
+            s = bilinear_point(p_a, p_b, q_a, q_b, 1.0, KEY_V_END)
+            return [(p_a, p_b, s), (p_a, s, q_b), (p_a, q_b, q_a)]
+        s = bilinear_point(p_a, p_b, q_a, q_b, 0.0, KEY_V_END)
+        return [(p_b, p_a, s), (p_b, s, q_a), (p_b, q_a, q_b)]
 
-    # corner quads adjacent to a channel: (quad, channel name, side)
-    corner_fans = {}
-    for name, spec in channel_specs.items():
-        if name == "ring":
-            continue
-        start, count = spec["start"], spec["count"]
-        if start not in quad_channel:
-            corner_fans[start] = (name, "start")
-        end_quad = (start + count - 1) % n
-        if end_quad not in quad_channel:
-            corner_fans[end_quad] = (name, "end")
+    transition_fans = {}
+    for spec in key_specs:
+        low = spec["k0"] - 1
+        high = (spec["k1"] + 1) % n
+        if low not in quad_key and 0 <= low < n:
+            transition_fans[low] = (spec, "low")
+        if high not in quad_key:
+            transition_fans[high] = (spec, "high")
 
     triangles = []
     planes = []
@@ -617,27 +675,18 @@ def wall_triangles(boundary, edges, channels, z_bottom, interior_direction):
         q_a = radial_projection(p_a, z_bottom)
         q_b = radial_projection(p_b, z_bottom)
         planes.append((wall_plane_normal(p_a, p_b, interior_direction), p_a))
-        if j in corner_fans:
-            name, side = corner_fans[j]
-            triangles.extend(corner_fan(j, name, side))
+        if j in transition_fans:
+            spec, side = transition_fans[j]
+            triangles.extend(transition(j, spec, side))
             continue
-        name = quad_channel.get(j)
-        if name is None:
+        spec = quad_key.get(j)
+        if spec is None:
             triangles.extend(quad_triangles(p_a, p_b, q_b, q_a))
             continue
-        spec = channel_specs[name]
-        start, count = spec["start"], spec["count"]
-        end_low = None
-        end_high = None
-        if name != "ring":
-            if j == start + 1:
-                end_low = channel_end_points(spec, start + 1, 0.0)
-            if j == start + count - 2:
-                end_high = channel_end_points(spec, start + count - 2, 1.0)
-        triangles.extend(channel_quad_triangles(
-            p_a, p_b, q_a, q_b, name, spec["v_low"], spec["v_high"],
-            spec["offset_mm"], spec["direction"], end_low, end_high))
-    return triangles, planes, keys_placed
+        triangles.extend(key_quad_triangles(
+            p_a, p_b, q_a, q_b, spec["kind"], spec["offset_mm"],
+            spec["direction"], j == spec["k0"], j == spec["k1"]))
+    return triangles, planes, key_specs
 
 
 # --- underside identifying mark ---------------------------------------------
@@ -903,12 +952,12 @@ def bottom_face(polygon, text):
 
 
 def build_mesh(tile, latitudes, longitudes, elevation_mm, radius_mm,
-               base_mm, channels):
+               base_mm, keys):
     """Triangle soup for one tile; bottom plane translated to z = 0.
 
     The walls are chamfered so each wall plane contains the globe center;
-    stud/socket alignment channels run along the mating walls; the tile id
-    is engraved on the underside.  Returns (triangles, boundary_edges,
+    vertical fin/groove alignment keys run down the mating walls; the tile
+    id is engraved on the underside.  Returns (triangles, boundary_edges,
     features).
     """
     center_lat = (tile["lat_min"] + tile["lat_max"]) / 2.0
@@ -920,9 +969,10 @@ def build_mesh(tile, latitudes, longitudes, elevation_mm, radius_mm,
                    frame)
     z_bottom = min(point[2] for row in top for point in row) - base_mm
 
-    boundary, edges = boundary_ring(tile, top, latitudes, longitudes)
+    boundary, edges, lats, lons = boundary_ring(tile, top, latitudes,
+                                                longitudes)
     triangles, planes, keys_placed = wall_triangles(
-        boundary, edges, channels, z_bottom, interior_direction)
+        boundary, edges, keys, z_bottom, interior_direction)
 
     def translate(point):
         return (point[0], point[1], point[2] - z_bottom)
@@ -1224,9 +1274,9 @@ def run_build(arguments):
                  arguments.sample_degrees))
 
         # Pass 1: sample each tile's elevations, compute the wall geometry
-        # and per-edge widths, and decide the stud/socket channels pair-wise.
+        # and per-sample widths, and decide the vertical keys pair-wise.
         tile_data = []
-        widths_by_tile = {}
+        geometry = {}
         for tile in tiles:
             latitudes, longitudes = grid_lines(tile, arguments.sample_degrees)
             elevations = sample_grid(grid, transform, latitudes, longitudes)
@@ -1243,17 +1293,21 @@ def run_build(arguments):
                            arguments.radius_mm, frame)
             z_bottom = min(point[2] for row in top for point in row) \
                 - arguments.base_mm
-            boundary, edges = boundary_ring(tile, top, latitudes, longitudes)
-            widths_by_tile[tile["id"]] = edge_mid_widths(boundary, edges,
-                                                         z_bottom)
+            boundary, edges, lats, lons = boundary_ring(tile, top, latitudes,
+                                                        longitudes)
+            geometry[tile["id"]] = {
+                "widths": sample_widths(boundary, z_bottom),
+                "edges": edges,
+                "lats": lats,
+                "lons": lons,
+            }
             tile_data.append({
                 "tile": tile,
                 "latitudes": latitudes,
                 "longitudes": longitudes,
                 "elevation_mm": elevation_mm,
             })
-        decisions = channel_decisions(tiles, widths_by_tile,
-                                      arguments.band_degrees)
+        decisions = key_decisions(tiles, geometry, arguments.band_degrees)
 
         # Pass 2: build the meshes and write the tiles.
         manifest_tiles = []

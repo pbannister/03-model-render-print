@@ -2,9 +2,10 @@
 
 [EPISODE]
 Chamfer the tile side walls so each wall's plane passes through the globe
-center, add stud/socket alignment keys on the mating walls, and engrave
-the tile id on the underside, so the tiles assemble into a globe without
-wedge gaps and are easy to identify and align.
+center, add vertical fin/groove alignment keys on the mating walls, and
+engrave the tile id on the underside, so the tiles assemble into a globe
+without wedge gaps, print without supports, and are easy to identify and
+align.
 
 [PHASE]
 phase 1
@@ -13,8 +14,11 @@ phase 1
 - Does every wall strip lie in a plane through the globe center (in the
   pre-translation tile frame)?
 - Do adjacent tiles share exactly one wall plane per mating edge, with
-  studs on the north/east walls mating sockets on the south/west walls
-  (polar caps socketed), so the assembled set has no wedge gaps?
+  vertical fins on the north/east walls mating vertical grooves on the
+  south/west walls (polar caps grooved), so the assembled set has no wedge
+  gaps and every fin meets a groove?
+- Are the keys vertical (running from the top edge down the wall), so the
+  tiles print without supports?
 - Does the underside carry an engraved (recessed) tile id while the flat
   bottom stays at z = 0?
 - Does `make check` still pass (watertight, flat bottom at z = 0, expected
