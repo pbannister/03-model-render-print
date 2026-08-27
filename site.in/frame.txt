@@ -1,10 +1,12 @@
 <h2>Assembly Frame</h2>
 <p>The internal assembly frame for the printable Earth: a central hub with
-one strut per tile, each strut ending in a pad that sits on the tile's flat
-bottom face. The frame aligns every tile at its exact spherical position
-(the pads match each tile's bottom outline, so rotation is fixed too) and
-stiffens the assembled globe. Drag to rotate, scroll to zoom; the faint
-wireframe sphere is the globe's surface (R = 100 mm).</p>
+one strut per tile, each strut ending in a plate that sits on the tile's
+flat bottom face. Each plate is shown at full size — it exactly matches the
+outline of the tile's underside, so adjacent plates meet edge-to-edge just as
+the assembled tiles will. The frame aligns every tile at its exact spherical
+position and stiffens the globe. The rotation axis here is the Earth's polar
+axis (the caps lie on it, pointing up/down on screen). Drag to rotate, scroll
+to zoom; the faint wireframe sphere is the globe's surface (R = 100 mm).</p>
 <div id="frame-legend" class="frame-legend"></div>
 <div id="frame-viewport" class="frame-viewport">
   <canvas id="frame-canvas"></canvas>

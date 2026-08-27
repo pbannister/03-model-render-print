@@ -173,6 +173,18 @@ def unit_radial(lat_degrees, lon_degrees):
     return (math.cos(phi) * math.cos(lam), math.cos(phi) * math.sin(lam), math.sin(phi))
 
 
+def tile_center(tile):
+    """The tile's local-frame center (lat, lon).
+
+    A polar cap centers on the pole, not the band midpoint, so its bottom
+    plane is perpendicular to the Earth's axis.
+    """
+    if tile["is_cap"]:
+        return (90.0 if tile["lat_max"] == 90.0 else -90.0, 0.0)
+    return ((tile["lat_min"] + tile["lat_max"]) / 2.0,
+            (tile["lon_min"] + tile["lon_max"]) / 2.0)
+
+
 def local_frame(center_lat, center_lon):
     """Orthonormal tile-local frame: (east, north, up).
 
@@ -1319,10 +1331,7 @@ def build_mesh(tile, latitudes, longitudes, elevation_mm, radius_mm, base_mm, ke
     id is engraved on the underside.  Returns (triangles, boundary_edges,
     features).
     """
-    center_lat = (tile["lat_min"] + tile["lat_max"]) / 2.0
-    center_lon = (
-        tile["lon_min"] if tile["is_cap"] else (tile["lon_min"] + tile["lon_max"]) / 2.0
-    )
+    center_lat, center_lon = tile_center(tile)
     frame = local_frame(center_lat, center_lon)
     interior_direction = unit_radial(center_lat, center_lon)
     top = top_grid(tile, latitudes, longitudes, elevation_mm, radius_mm, frame)
@@ -1689,12 +1698,7 @@ def run_build(arguments):
                 ]
                 for row in elevations
             ]
-            center_lat = (tile["lat_min"] + tile["lat_max"]) / 2.0
-            center_lon = (
-                tile["lon_min"]
-                if tile["is_cap"]
-                else (tile["lon_min"] + tile["lon_max"]) / 2.0
-            )
+            center_lat, center_lon = tile_center(tile)
             frame = local_frame(center_lat, center_lon)
             top = top_grid(
                 tile, latitudes, longitudes, elevation_mm, arguments.radius_mm, frame

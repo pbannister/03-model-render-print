@@ -27,7 +27,7 @@ import stl_tiles_build as tiles
 FRAME_HUB_RADIUS_MM = 25.0       # central hub radius
 FRAME_ROD_RADIUS_MM = 3.0        # strut rod radius
 FRAME_PAD_THICKNESS_MM = 3.0     # pad plate thickness
-FRAME_PAD_SCALE = 0.7            # pad polygon scale relative to the bottom
+FRAME_PAD_SCALE = 1.0            # pad polygon scale relative to the bottom
 FRAME_ROD_SEGMENTS = 16          # cylinder side segments
 FRAME_HUB_SEGMENTS = 32          # hub sphere segments
 FRAME_PAD_TARGET_POINTS = 80     # simplified pad polygon point count
@@ -164,9 +164,7 @@ def frame_geometry(tiles_all, elevation_sampler, radius_mm, base_mm):
     """
     pieces = []
     for tile in tiles_all:
-        center_lat = (tile["lat_min"] + tile["lat_max"]) / 2.0
-        center_lon = tile["lon_min"] if tile["is_cap"] else (
-            tile["lon_min"] + tile["lon_max"]) / 2.0
+        center_lat, center_lon = tiles.tile_center(tile)
         frame = tiles.local_frame(center_lat, center_lon)
         up = tiles.unit_radial(center_lat, center_lon)
 

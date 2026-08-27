@@ -29,6 +29,7 @@ const BAND_LABELS = {
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0a1030);
 const camera = new THREE.PerspectiveCamera(45, 1, 1, 4000);
+camera.up.set(0, 0, 1);  // Earth's rotation axis is +Z
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
@@ -150,9 +151,9 @@ function frame() {
     }
     const sinPhi = Math.sin(view.phi);
     camera.position.set(
+        view.radius * sinPhi * Math.cos(view.theta),
         view.radius * sinPhi * Math.sin(view.theta),
-        view.radius * Math.cos(view.phi),
-        view.radius * sinPhi * Math.cos(view.theta));
+        view.radius * Math.cos(view.phi));
     camera.lookAt(0, 0, 0);
     renderer.render(scene, camera);
     requestAnimationFrame(frame);
