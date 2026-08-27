@@ -147,5 +147,84 @@ assert build.elevation_to_mm(8849.0, -10994.0, 8849.0,
                              parameters_flat) == mapped_high
 assert sea_level_mm > mapped_low, "the sea-level plateau sits above the base"
 
+# --- chamfered walls, alignment keys, underside mark ------------------------
+def count_nonmanifold(triangles):
+    edge_counts = {}
+    for (a, c, d) in triangles:
+        for (start, end) in ((a, c), (c, d), (d, a)):
+            key_start = (round(start[0], 6), round(start[1], 6),
+                         round(start[2], 6))
+            key_end = (round(end[0], 6), round(end[1], 6), round(end[2], 6))
+            key = (key_start, key_end) if key_start <= key_end \
+                else (key_end, key_start)
+            edge_counts[key] = edge_counts.get(key, 0) + 1
+    return sum(1 for count in edge_counts.values() if count != 2)
+
+# key plan conventions
+plan = build.key_plan_for_tile(
+    next(t for t in tiles if t["id"] == "tile-N30E000"), 30.0)
+kinds = {entry["edge"]: entry["kind"] for entry in plan}
+assert kinds == {"north": "stud", "east": "stud",
+                 "south": "socket", "west": "socket"}, kinds
+plan = build.key_plan_for_tile(
+    next(t for t in tiles if t["id"] == "tile-S60E000"), 30.0)
+kinds = {entry["edge"]: entry["kind"] for entry in plan}
+assert kinds["south"] == "stud", "pole-side south edge carries a stud"
+assert [entry["edge"] for entry in
+        build.key_plan_for_tile(tiles[-1], 30.0)] == ["ring"]
+
+# pair-aware decisions: a tall tile mates a tall tile; a thin tile skips
+all_widths = {}
+for tile_plan in tiles:
+    if tile_plan["is_cap"]:
+        all_widths[tile_plan["id"]] = {"ring": 12.0}
+    else:
+        all_widths[tile_plan["id"]] = {"south": 12.0, "east": 12.0,
+                                       "north": 12.0, "west": 12.0}
+decisions = build.channel_decisions(tiles, all_widths, 30.0)
+assert decisions["tile-N30E000"]["north"] == "stud"
+assert decisions["tile-N30E000"]["south"] == "socket"
+assert decisions["tile-N30E000"]["east"] == "stud"
+assert decisions["tile-N30E000"]["west"] == "socket"
+assert decisions["tile-S60E000"]["south"] == "stud", decisions
+assert decisions["tile-N90"]["ring"] == "socket"
+thin = dict(all_widths)
+thin["tile-N30E045"]["south"] = 2.0
+thin["tile-N90"]["ring"] = 2.0
+decisions = build.channel_decisions(tiles, thin, 30.0)
+assert decisions["tile-N30E000"]["north"] is None, \
+    "stud needs the neighbor's socket"
+assert decisions["tile-N90"]["ring"] is None
+
+# synthetic tile: chamfer planes through the origin, keys, id, watertight
+synthetic = next(t for t in tiles if t["id"] == "tile-N30E000")
+lats_s, lons_s = build.grid_lines(synthetic, 1.0)
+elev_s = [[12.0 for _ in lons_s] for _ in lats_s]
+mesh, boundary_edges, features = build.build_mesh(
+    synthetic, lats_s, lons_s, elev_s, 100.0, 8.0,
+    {"north": "stud", "east": "stud", "south": "socket", "west": "socket"})
+assert features["id_mark"] == "N30E000", features["id_mark"]
+for (normal, point) in features["wall_planes"]:
+    assert abs(build.dot(normal, point)) < 1e-6, \
+        "every wall plane must contain the globe center"
+kinds = {key["edge"]: key["kind"] for key in features["keys"]}
+assert kinds == {"north": "stud", "east": "stud",
+                 "south": "socket", "west": "socket"}, kinds
+z_min = min(point[2] for triangle in mesh for point in triangle)
+assert abs(z_min) < 1e-9, z_min
+assert any(abs(point[2] - build.GROOVE_DEPTH_MM) < 1e-9
+           for triangle in mesh for point in triangle), "groove floor"
+assert count_nonmanifold(mesh) == 0, "synthetic tile must be watertight"
+
+# polar cap: ring socket, id, watertight
+cap = next(t for t in tiles if t["id"] == "tile-N90")
+lats_c, lons_c = build.grid_lines(cap, 2.0)
+elev_c = [[12.0 for _ in lons_c] for _ in lats_c]
+mesh_c, _, features_c = build.build_mesh(cap, lats_c, lons_c, elev_c,
+                                         100.0, 8.0, {"ring": "socket"})
+assert features_c["id_mark"] == "N90", features_c["id_mark"]
+assert [key["edge"] for key in features_c["keys"]] == ["ring"]
+assert count_nonmanifold(mesh_c) == 0, "cap tile must be watertight"
+
 print('04-stl-tiles-math: tiling math invariants ok')
 PY

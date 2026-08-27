@@ -25,6 +25,14 @@ and prints on a 3D printer.
 - Each tile must mate with its neighbors along the top surface: the top
   surface is the spherical surface of the globe at radius R with elevation
   relief, and neighboring tiles sample the same geographic boundary.
+- The side walls must be chamfered so each wall plane contains the globe
+  center, so the walls of assembled neighbors are coplanar.
+- Alignment keys: north and east walls carry studs, south and west walls
+  carry sockets, polar-cap rings carry a socket groove; a stud is placed
+  only when its mating socket exists, so every stud meets a socket in the
+  assembled globe.
+- The underside must carry an engraved (recessed) tile id; z = 0 must stay
+  the lowest plane.
 - Elevation must be mapped with a global (not per-tile) range, so all tiles
   share the same absolute scale.
 - Output format: binary STL, millimeters.

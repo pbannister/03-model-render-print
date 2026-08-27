@@ -8,7 +8,9 @@ the `model-elevation-earth` project (`/datasets/dataset-etopo-2022/`,
 15-arcsecond GeoTIFF tiles). This project consumes that data read-only and
 renders the Earth's surface as STL tile models for 3D printing: each tile is
 one slice of the globe along lines of latitude and longitude, has a flat
-bottom that sits against the printer bed, and loads directly into a slicer
+bottom that sits against the printer bed, mates its neighbors with chamfered
+walls through the globe center plus stud/socket alignment keys, carries the
+tile id engraved on the underside, and loads directly into a slicer
 (OrcaSlicer, PrusaSlicer, …). The chosen approach is tracked in
 `documents/05-stl-approach.md`.
 
@@ -78,7 +80,10 @@ All project features are defined in `prompts/features/` and implemented in `sour
   `scripts/stl-tiles-build.sh build` without the flag for a run with
   seafloor relief.
 - Load one tile (or a region) into a slicer. Tiles are millimeters, origin
-  at the tile's flat bottom (z = 0 is the bed plane).
+  at the tile's flat bottom (z = 0 is the bed plane). The tile id is
+  engraved on the underside; the north/east walls carry studs and the
+  south/west walls sockets (polar-cap rings are socketed), so assembled
+  neighbors lock together.
 - `make check` re-validates every generated tile (watertight, flat bottom,
   expected size) without rebuilding.
 - The full globe at the default 30-degree banding is 42 tiles; use

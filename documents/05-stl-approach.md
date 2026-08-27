@@ -70,10 +70,25 @@ of latitude and longitude; each tile is an STL file that:
   Challenger Deep ≈ 3 mm.
 - Bottom: a flat plane at the local z of the shallowest top point minus
   `base`, translated so the plane is z = 0 (the bed plane in the STL).
-- Side walls: the boundary of the top surface dropped vertically (along
-  the local up axis) to the bottom plane. The tile is watertight: top
-  quads (fan at the pole), bottom fan from the footprint center, wall
-  quads around the boundary.
+- Side walls: chamfered. Each wall quad is bounded above by the top-surface
+  boundary edge and below by the radial projection of that edge onto the
+  bottom plane, so every wall plane contains the globe center. In the
+  assembled globe each shared edge pair therefore lies in one common wall
+  plane (no wedge gaps), and the walls flare slightly outward going up
+  (a trivially printable overhang).
+- Alignment channels: along the middle of each wall edge, a tongue (stud)
+  or groove (socket). North and east walls carry studs; south and west
+  carry sockets; polar-cap rings carry a continuous socket groove. A stud
+  is only placed where its mating socket exists (pair-wise decision from
+  the wall heights), so every stud meets a socket in the assembled globe.
+  The channel v-split is anchored at a constant distance below the top
+  edge, so the stud and socket of a shared edge align exactly even where
+  bands subdivide the edge differently.
+- Underside mark: the tile id (e.g. `N30E045`) is engraved as recessed
+  grooves on the underside (z stays 0; the grooves cut upward into the
+  base). Engraved, not raised, so the tile still sits flat on the bed.
+- The tile is watertight: top quads (fan at the pole), chamfered wall
+  strips, engraved bottom face (ring fan around the label grid).
 - Units: millimeters; the STL's z = 0 is the bed plane, so slicers can
   "lay on face" without translation.
 
@@ -94,9 +109,6 @@ of latitude and longitude; each tile is an STL file that:
 
 ## Open questions
 
-- Globe assembly details: alignment keys, chamfers, or an assembly core
-  (the interiors of tilted-up tiles leave small wedge gaps below the
-  mating top surfaces).
 - Print calibration: relief/base defaults tuned against a real print on the
   Elegoo Centauri Carbon (0.4 mm nozzle).
 - Larger fidelity: finer sample spacing (e.g. 0.1 degree) and/or smaller
@@ -116,6 +128,7 @@ of latitude and longitude; each tile is an STL file that:
 - 2026-08-26 — **Solid construction: top surface + flat bottom + vertical
   local walls, watertight per tile**; bottom translated to z = 0.
   Reason: prints flat on the bed; slicers need watertight solids.
+  Superseded the same day: the walls are now chamfered (below).
 - 2026-08-26 — **Elevation mapping: global ETOPO range, base 3 mm + relief
   20 mm**. Reason: consistent absolute scale across tiles; print-friendly
   relief; deepest ocean floor still clears the base plate.
@@ -134,6 +147,21 @@ of latitude and longitude; each tile is an STL file that:
   deferred. Flat oceans clamp water-covered cells to 0 m elevation, so all
   ocean cells map to one sea-level plateau height above the base and the
   coastline rim stays visible; a flush-to-base variant remains possible.
+- 2026-08-26 — **Chamfered walls through the globe center**. Each wall
+  quad's plane contains the globe center, so every shared edge pair lies
+  in one common plane in the assembled globe and the wedge gaps disappear.
+  Reason: the vertical walls left per-tile wedge gaps when tiles were
+  tilted up and joined; the chamfer makes the mating walls coplanar.
+- 2026-08-26 — **Alignment channels: studs (north/east) and sockets
+  (south/west), socketed polar-cap rings, placed pair-wise**. Reason:
+  chamfered walls alone leave the tiles free to slide; a stud always meets
+  a socket because a stud is only placed where the mating socket exists.
+  The channels run the middle of each edge (the corner quads stay plain)
+  and are anchored at a constant distance below the top edge, so they
+  align even across bands that subdivide the shared edge differently.
+- 2026-08-26 — **Underside id: engraved (recessed) tile id on the
+  underside**. Reason: the user asked for an identifying mark to aid
+  assembly; engraving keeps z = 0 so the tile still sits flat on the bed.
 - 2026-08-26 — **Verification: watertightness (edge-manifold), flat bottom
   at z = 0, expected bounds, positive signed volume** via `make check`.
   Reason: these are the properties slicers rely on.

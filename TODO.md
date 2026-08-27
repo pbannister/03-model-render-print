@@ -29,11 +29,6 @@
 
 ## Open Questions
 
-* [ ] Globe assembly: the tiles' top surfaces mate exactly, but the flat
-      bottoms and vertical walls are per-tile, so the interiors leave small
-      wedge gaps when tiles are tilted up and joined. Decide whether to add
-      alignment keys, chamfers, or an assembly core (see
-      `documents/05-stl-approach.md`).
 * [ ] Print calibration: verify one printed tile on the actual printer
       (Elegoo Centauri Carbon; see the workspace `profiles-elegoo-centauri-carbon`
       project) and tune relief/base defaults for the 0.4 mm nozzle.
@@ -42,6 +37,14 @@
 
 ## Recently Completed
 
+* [x] Add tile assembly features (2026-08-26): chamfered walls through the
+      globe center (each wall plane contains the center, so assembled
+      neighbors' walls are coplanar), stud/socket alignment channels
+      (north/east studs, south/west sockets, socketed cap rings, placed
+      pair-wise so every stud meets a socket), and the tile id engraved on
+      the underside (recessed grooves keep z = 0). The globe-assembly open
+      question is resolved; decisions logged in
+      `documents/05-stl-approach.md`.
 * [x] Decide the ocean treatment: flat for now (2026-08-26). The
       `--oceans-flat` option clamps water-covered cells to sea level, so
       oceans print as one smooth plateau (coastline rim visible); the
