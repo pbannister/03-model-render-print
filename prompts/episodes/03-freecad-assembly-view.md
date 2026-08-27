@@ -18,14 +18,14 @@ phase 1
 - Is the whole change reviewable in one sitting?
 
 [RISK]
-- Is `freecadcmd` installable on this build host (package availability,
-  size, Python compatibility), and is that install part of this episode or
-  an owner action?
+- Is `freecadcmd` reachable from the installed FreeCAD 1.1.1 AppImage
+  (py311) on this host (e.g. a `FreeCADCmd` symlink or one-time
+  `--appimage-extract`), and does it run headless next to the running GUI?
 - Does the headless render work (Qt offscreen platform) without a display?
 
 [SUB-TASKS]
-- Install FreeCAD (`freecadcmd`) on the build host, or record the install
-  as an explicit owner action with a setup note in `documents/`.
+- Locate and invoke `freecadcmd` from the installed FreeCAD 1.1.1 AppImage
+  (or extract it once), and record the setup note in `documents/`.
 - Write `scripts/freecad-assemble.py`: read placements, load each tile STL
   as a mesh, apply the placement transform, add to a document, export
   `.FCStd` and a PNG render.
