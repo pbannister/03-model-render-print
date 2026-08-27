@@ -76,14 +76,14 @@ of latitude and longitude; each tile is an STL file that:
   assembled globe each shared edge pair therefore lies in one common wall
   plane (no wedge gaps), and the walls flare slightly outward going up
   (a trivially printable overhang).
-- Alignment keys: vertical fins and grooves on the walls. North and east
-  walls carry fins (studs); south and west carry grooves (sockets);
-  polar-cap rings carry grooves. A fin is only placed where its mating
-  groove exists (pair-wise decision from the wall heights at the key
-  position), so every fin meets a groove in the assembled globe. The keys
-  run from the top edge down the wall (the upper ~half), so every key
-  surface is near-vertical and the tiles print without supports; the only
-  horizontal key faces are small (2-3.6 mm) end faces.
+- Alignment keys: vertical lens-shaped fins and grooves on the walls.
+  North and east walls carry fins (studs); south and west carry grooves
+  (sockets); polar-cap rings carry grooves. A fin is only placed where its
+  mating groove exists (pair-wise decision from the wall heights at the
+  key position), so every fin meets a groove in the assembled globe. Each
+  key tapers to zero depth at both ends (a lens over the reference height
+  of 8 mm), so every key surface is slanted and the tiles print without
+  supports.
 - Underside mark: the tile id (e.g. `N30E045`) is engraved as recessed
   grooves on the underside (z stays 0; the grooves cut upward into the
   base). Engraved, not raised, so the tile still sits flat on the bed.
@@ -156,11 +156,16 @@ of latitude and longitude; each tile is an STL file that:
   (south/west), socketed polar-cap rings, placed pair-wise**. Reason:
   chamfered walls alone leave the tiles free to slide; a fin always meets
   a groove because a fin is only placed where the mating groove exists.
-  The keys run vertically (top edge down the wall), so all key surfaces
-  are near-vertical and the tiles print without supports.
+  The keys are vertical so all key surfaces are near-vertical and the
+  tiles print without supports.
   Superseded the same day by the vertical-key orientation (below): the
   first keys were horizontal ridges along the edges, and the printed
   tiles needed a great deal of supports, so the keys were re-oriented.
+- 2026-08-26 — **Lens-shaped keys**. The vertical fins and grooves taper
+  to zero depth at both ends (a lens over the reference height of 8 mm),
+  so they have no horizontal end faces at all. Reason: the slicer flagged
+  the flat bottom-end shelves and groove ceilings of the plain vertical
+  keys as floating regions; the lens makes every key surface slanted.
 - 2026-08-26 — **Underside id: engraved (recessed) tile id on the
   underside**. Reason: the user asked for an identifying mark to aid
   assembly; engraving keeps z = 0 so the tile still sits flat on the bed.

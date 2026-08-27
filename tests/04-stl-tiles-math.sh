@@ -186,7 +186,7 @@ def synthetic_geometry(sample_degrees, width):
         frame_g = build.local_frame(center_lat, center_lon)
         top_g = build.top_grid(tile_plan, lats_g, lons_g, elev_g, 100.0,
                                frame_g)
-        z_bottom_g = min(point[2] for row in top_g for point in row) - 8.0
+        z_bottom_g = min(point[2] for row in top_g for point in row) - 12.0
         boundary_g, edges_g, lats_b, lons_b = build.boundary_ring(
             tile_plan, top_g, lats_g, lons_g)
         geometry[tile_plan["id"]] = {
@@ -224,7 +224,7 @@ synthetic = next(t for t in tiles if t["id"] == "tile-N30E000")
 lats_s, lons_s = build.grid_lines(synthetic, 0.25)
 elev_s = [[12.0 for _ in lons_s] for _ in lats_s]
 mesh, boundary_edges, features = build.build_mesh(
-    synthetic, lats_s, lons_s, elev_s, 100.0, 8.0,
+    synthetic, lats_s, lons_s, elev_s, 100.0, 12.0,
     decisions["tile-N30E000"])
 assert features["id_mark"] == "N30E000", features["id_mark"]
 for (normal, point) in features["wall_planes"]:
@@ -244,7 +244,7 @@ cap = next(t for t in tiles if t["id"] == "tile-N90")
 lats_c, lons_c = build.grid_lines(cap, 0.25)
 elev_c = [[12.0 for _ in lons_c] for _ in lats_c]
 mesh_c, _, features_c = build.build_mesh(cap, lats_c, lons_c, elev_c,
-                                         100.0, 8.0,
+                                         100.0, 12.0,
                                          decisions["tile-N90"])
 assert features_c["id_mark"] == "N90", features_c["id_mark"]
 assert all(key["edge"] == "ring" and key["kind"] == "socket"

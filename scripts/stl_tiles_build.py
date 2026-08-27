@@ -304,12 +304,15 @@ def quad_triangles(point_a, point_b, point_c, point_d):
     return [(point_a, point_b, point_c), (point_a, point_c, point_d)]
 
 
-KEY_MIN_WIDTH_MM = 6.5        # minimum wall height that hosts a key
+KEY_MIN_WIDTH_MM = 8.0        # minimum wall height that hosts a key
 KEY_STUD_WIDTH_MM = 3.0       # fin width along the edge
 KEY_STUD_HEIGHT_MM = 2.0      # fin protrusion from the wall plane
 KEY_SOCKET_WIDTH_MM = 3.6     # groove width along the edge (fin + clearance)
 KEY_SOCKET_DEPTH_MM = 2.6     # groove depth (fin plus engagement slack)
-KEY_V_END = 1.0 - (KEY_SOCKET_DEPTH_MM + 0.5) / KEY_MIN_WIDTH_MM
+KEY_LENS_TOP_MM = 1.5         # key depth is 0 in the top 1.5 mm of the wall
+KEY_LENS_RISE_MM = 3.5        # depth rises to its maximum over 3.5 mm
+KEY_LENS_BOTTOM_MM = 1.5      # key depth is 0 in the bottom 1.5 mm
+KEY_LENS_FALL_MM = 3.5        # depth falls to 0 over 3.5 mm
 GROOVE_DEPTH_MM = 0.6         # underside mark groove depth
 
 
@@ -567,47 +570,103 @@ def key_geometry(p_a, p_b, q_a, q_b, kind, interior_direction):
     return KEY_SOCKET_DEPTH_MM, (-normal[0], -normal[1], -normal[2])
 
 
+def key_depth(v_fraction, max_depth):
+    """Lens depth at a v-fraction (0..1) of the key's reference height.
+
+    The lens is defined over the constant KEY_MIN_WIDTH_MM, so the depth
+    profile and its split points are identical for every fin and groove
+    and for every quad of a key: shared edges stay continuous, and a fin
+    always sits inside its groove with the depth slack between the two
+    max depths.
+    """
+    millimetres = v_fraction * KEY_MIN_WIDTH_MM
+    rise = max(0.0, min(1.0,
+                        (millimetres - KEY_LENS_TOP_MM) / KEY_LENS_RISE_MM))
+    fall = max(0.0, min(1.0,
+                        (KEY_MIN_WIDTH_MM - KEY_LENS_BOTTOM_MM
+                         - millimetres) / KEY_LENS_FALL_MM))
+    return max_depth * rise * fall
+
+
+def key_v_lines():
+    """Sorted v-fractions (0..1) where the key lens changes shape."""
+    points = [KEY_LENS_TOP_MM, KEY_LENS_TOP_MM + KEY_LENS_RISE_MM,
+              KEY_MIN_WIDTH_MM - KEY_LENS_BOTTOM_MM - KEY_LENS_FALL_MM,
+              KEY_MIN_WIDTH_MM - KEY_LENS_BOTTOM_MM,
+              KEY_MIN_WIDTH_MM / 2.0]
+    return sorted({max(0.0, min(1.0, point / KEY_MIN_WIDTH_MM))
+                   for point in points})
+
+
 def key_quad_triangles(p_a, p_b, q_a, q_b, kind, offset_mm, direction,
                        side_low, side_high):
-    """Vertical fin/groove surfaces for one keyed quad.
+    """Vertical lens-shaped fin/groove surfaces for one keyed quad.
 
-    The wall's upper part (v in [0, KEY_V_END]) is replaced by the fin or
-    groove; the lower part stays.  side_low/side_high flag the quads at
-    the key's along-edge ends, which carry the end faces.
+    The wall's middle band (where the lens depth is nonzero) is replaced by
+    the fin (protruding) or groove (recessed); the top and bottom bands
+    stay.  The lens tapers the depth to zero at both ends, so there are no
+    horizontal key faces.  side_low/side_high flag the quads at the key's
+    along-edge ends, which carry the slanted side faces.
     """
-    def shift(point):
-        return (point[0] + offset_mm * direction[0],
-                point[1] + offset_mm * direction[1],
-                point[2] + offset_mm * direction[2])
+    def shift(point, depth):
+        return (point[0] + depth * direction[0],
+                point[1] + depth * direction[1],
+                point[2] + depth * direction[2])
 
-    point_tl = bilinear_point(p_a, p_b, q_a, q_b, 0.0, KEY_V_END)
-    point_tr = bilinear_point(p_a, p_b, q_a, q_b, 1.0, KEY_V_END)
+    v_lines = key_v_lines()
+    first = v_lines[0]
+    last = v_lines[-1]
     triangles = []
-    # the lower part of the wall stays
-    triangles.extend(quad_triangles(point_tl, point_tr, q_b, q_a))
-    # the fin outer face / groove floor
-    triangles.extend(quad_triangles(shift(p_a), shift(p_b),
-                                    shift(point_tr), shift(point_tl)))
-    # the top face at the top edge
-    triangles.extend(quad_triangles(p_a, p_b, shift(p_b), shift(p_a)))
-    # the bottom end face at KEY_V_END
-    triangles.extend(quad_triangles(point_tl, point_tr,
-                                    shift(point_tr), shift(point_tl)))
-    if side_low:
-        triangles.extend(quad_triangles(p_a, point_tl,
-                                        shift(point_tl), shift(p_a)))
-    if side_high:
-        triangles.extend(quad_triangles(p_b, point_tr,
-                                        shift(point_tr), shift(p_b)))
+    # the top and bottom bands of the wall stay
+    point_tl = bilinear_point(p_a, p_b, q_a, q_b, 0.0, first)
+    point_tr = bilinear_point(p_a, p_b, q_a, q_b, 1.0, first)
+    triangles.extend(quad_triangles(p_a, p_b, point_tr, point_tl))
+    point_bl = bilinear_point(p_a, p_b, q_a, q_b, 0.0, last)
+    point_br = bilinear_point(p_a, p_b, q_a, q_b, 1.0, last)
+    triangles.extend(quad_triangles(point_bl, point_br, q_b, q_a))
+    # the lens band: offset sub-quads at the v-lines, plus the side faces
+    for index in range(len(v_lines) - 1):
+        v_a = v_lines[index]
+        v_b = v_lines[index + 1]
+        if v_b - v_a < 1e-9:
+            continue
+        d_a = key_depth(v_a, offset_mm)
+        d_b = key_depth(v_b, offset_mm)
+        pa_low = bilinear_point(p_a, p_b, q_a, q_b, 0.0, v_a)
+        pa_high = bilinear_point(p_a, p_b, q_a, q_b, 1.0, v_a)
+        pb_low = bilinear_point(p_a, p_b, q_a, q_b, 0.0, v_b)
+        pb_high = bilinear_point(p_a, p_b, q_a, q_b, 1.0, v_b)
+        triangles.extend(quad_triangles(shift(pa_low, d_a),
+                                        shift(pa_high, d_a),
+                                        shift(pb_high, d_b),
+                                        shift(pb_low, d_b)))
+        if side_low:
+            if d_a < 1e-9:
+                triangles.append((pa_low, pb_low, shift(pb_low, d_b)))
+            elif d_b < 1e-9:
+                triangles.append((pa_low, pb_low, shift(pa_low, d_a)))
+            else:
+                triangles.extend(quad_triangles(pa_low, pb_low,
+                                                shift(pb_low, d_b),
+                                                shift(pa_low, d_a)))
+        if side_high:
+            if d_a < 1e-9:
+                triangles.append((pa_high, pb_high, shift(pb_high, d_b)))
+            elif d_b < 1e-9:
+                triangles.append((pa_high, pb_high, shift(pa_high, d_a)))
+            else:
+                triangles.extend(quad_triangles(pa_high, pb_high,
+                                                shift(pb_high, d_b),
+                                                shift(pa_high, d_a)))
     return triangles
 
 
 def wall_triangles(boundary, edges, keys, z_bottom, interior_direction):
     """Wall quads chamfered through the globe center, with vertical
-    fin/groove alignment keys where decided.
+    lens-shaped fin/groove alignment keys where decided.
 
-    The keys are vertical (they run from the top edge down the wall), so
-    every key surface is near-vertical and prints without supports.
+    The keys are vertical and taper to zero at both ends, so every key
+    surface is slanted and the tiles print without supports.
     Returns (triangles, planes, keys_placed)."""
     n = len(boundary)
     quad_key = {}
@@ -646,17 +705,33 @@ def wall_triangles(boundary, edges, keys, z_bottom, interior_direction):
         key_specs.append(spec)
 
     def transition(j, spec, side):
-        """Plain quad adjacent to a key, with the shared edge subdivided
-        at KEY_V_END (fan from the opposite vertex)."""
+        """Plain quad adjacent to a key, with the shared edge subdivided at
+        every lens v-line (fan from the opposite vertex)."""
         p_a = boundary[j]
         p_b = boundary[(j + 1) % n]
         q_a = radial_projection(p_a, z_bottom)
         q_b = radial_projection(p_b, z_bottom)
+        key_quad_index = spec["k0"] if side == "low" else spec["k1"]
+        u = 0.0 if side == "low" else 1.0
+        kp_a = boundary[key_quad_index]
+        kp_b = boundary[(key_quad_index + 1) % n]
+        kq_a = radial_projection(kp_a, z_bottom)
+        kq_b = radial_projection(kp_b, z_bottom)
+        splits = [bilinear_point(kp_a, kp_b, kq_a, kq_b, u, v)
+                  for v in key_v_lines()]
         if side == "low":
-            s = bilinear_point(p_a, p_b, q_a, q_b, 1.0, KEY_V_END)
-            return [(p_a, p_b, s), (p_a, s, q_b), (p_a, q_b, q_a)]
-        s = bilinear_point(p_a, p_b, q_a, q_b, 0.0, KEY_V_END)
-        return [(p_b, p_a, s), (p_b, s, q_a), (p_b, q_a, q_b)]
+            triangles = [(p_a, p_b, splits[0])]
+            for m in range(len(splits) - 1):
+                triangles.append((p_a, splits[m], splits[m + 1]))
+            triangles.append((p_a, splits[-1], q_b))
+            triangles.append((p_a, q_b, q_a))
+            return triangles
+        triangles = [(p_b, p_a, splits[0])]
+        for m in range(len(splits) - 1):
+            triangles.append((p_b, splits[m], splits[m + 1]))
+        triangles.append((p_b, splits[-1], q_a))
+        triangles.append((p_b, q_a, q_b))
+        return triangles
 
     transition_fans = {}
     for spec in key_specs:
