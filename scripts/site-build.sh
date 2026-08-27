@@ -138,4 +138,11 @@ if [ -f "$FILE_RIB_MODEL" ]; then
     cp "$FILE_RIB_MODEL" "$DIRECTORY_OUTPUT/rib-firstrow.obj"
     echo "site-build: copied the rib + first-row model"
 fi
+
+# Copy the printable rib STL (if present) for the rib page's download link.
+FILE_RIB_STL="$REPOSITORY_ROOT/dataflow.out/rib/rib.stl"
+if [ -f "$FILE_RIB_STL" ]; then
+    cp "$FILE_RIB_STL" "$DIRECTORY_OUTPUT/rib.stl"
+    echo "site-build: copied the rib STL"
+fi
 exit 0

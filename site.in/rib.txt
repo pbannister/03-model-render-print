@@ -4,10 +4,15 @@ it was too hard to assemble and align). The globe is built as two
 hemispheres, assembled independently, then joined at the equator.</p>
 <p>Each hemisphere starts from a <strong>reinforcing rib</strong> — a full
 ring around the entire diameter, sitting just above the equator (north) or
-just below it (south) — in contact with the inner (bottom) faces of that
-hemisphere's first row of tiles. The rib fixes the first row's position all
-the way around the seam, so there is no cumulative error: every subsequent
-row stacks up from a ring that is already true.</p>
+just below it (south) — whose outer face makes contact with the inner faces
+of that hemisphere's first row of tiles. The rib fixes the first row's
+position all the way around the seam, so there is no cumulative error: every
+subsequent row stacks up from a ring that is already true.</p>
+<p>The rib has a rectangular cross-section: its outer face sits at the
+globe's sea-level diameter (200 mm), its inside diameter is 20 mm less
+(180 mm), so the ring is 10 mm wide, and it is 10 mm thick. It is one full
+ring, printed flat, used for both hemispheres (flip it over for the other).
+The printable STL is <a href="rib.stl" download>rib.stl</a>.</p>
 <p>Here the two ribs and both first rows are shown together (tiles are
 semi-transparent so you can see the ribs pressing against their inner faces):
 the red rib + yellow tiles are the northern hemisphere's start, the blue rib
