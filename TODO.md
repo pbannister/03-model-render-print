@@ -18,6 +18,15 @@
       bounds, positive signed volume. Verified 2026-08-26 by
       `make check` over the default full-globe run (42 tiles).
 
+## Pending Tasks
+
+* [ ] Assembled globe viewing (episodes written 2026-08-26; dispatch after
+      the human ratifies):
+      `prompts/episodes/02-assembled-globe-export.md` (merge the tiles into
+      one positioned mesh for viewing in any mesh viewer, incl. OnShape
+      import) and `prompts/episodes/03-freecad-assembly-view.md` (assemble
+      and render in FreeCAD — long-term goal, needs FreeCAD installed).
+
 ## Open Questions
 
 * [ ] Globe assembly: the tiles' top surfaces mate exactly, but the flat
