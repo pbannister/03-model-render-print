@@ -4,15 +4,20 @@ it was too hard to assemble and align). The globe is built as two
 hemispheres, assembled independently, then joined at the equator.</p>
 <p>Each hemisphere starts from a <strong>reinforcing rib</strong> — a full
 ring around the entire diameter, sitting just above the equator (north) or
-just below it (south) — whose outer face makes contact with the inner faces
-of that hemisphere's first row of tiles. The rib fixes the first row's
-position all the way around the seam, so there is no cumulative error: every
-subsequent row stacks up from a ring that is already true.</p>
-<p>The rib has a rectangular cross-section: its outer face sits at the
-globe's sea-level diameter (200 mm), its inside diameter is 20 mm less
-(180 mm), so the ring is 10 mm wide, and it is 10 mm thick. It is one full
-ring, printed flat, used for both hemispheres (flip it over for the other).
-The printable STL is <a href="rib.stl" download>rib.stl</a>.</p>
+just below it (south) — whose outer face makes full contact with the inner
+(flat-bottom) faces of that hemisphere's first row of tiles. The rib fixes
+the first row's position all the way around the seam, so there is no
+cumulative error: every subsequent row stacks up from a ring that is already
+true.</p>
+<p>The rib is not a smooth cylinder on the outside: its outer surface is a
+series of flat facets, one per first-row tile, each lying in that tile's
+bottom plane, so every facet mates flush with the tile's inner face. The
+rib's inside diameter is 20 mm less than the globe's sea-level diameter
+(200 mm), i.e. 180 mm (inner radius 90 mm), and it is 10 mm thick. One rib
+is printed per hemisphere:
+<a href="rib-north.stl" download>rib-north.stl</a> and
+<a href="rib-south.stl" download>rib-south.stl</a> (both print flat, bottom
+at z = 0).</p>
 <p>Here the two ribs and both first rows are shown together (tiles are
 semi-transparent so you can see the ribs pressing against their inner faces):
 the red rib + yellow tiles are the northern hemisphere's start, the blue rib

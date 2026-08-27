@@ -139,10 +139,15 @@ if [ -f "$FILE_RIB_MODEL" ]; then
     echo "site-build: copied the rib + first-row model"
 fi
 
-# Copy the printable rib STL (if present) for the rib page's download link.
-FILE_RIB_STL="$REPOSITORY_ROOT/dataflow.out/rib/rib.stl"
-if [ -f "$FILE_RIB_STL" ]; then
-    cp "$FILE_RIB_STL" "$DIRECTORY_OUTPUT/rib.stl"
-    echo "site-build: copied the rib STL"
+# Copy the printable rib STLs (if present) for the rib page's download links.
+FILE_RIB_STL_NORTH="$REPOSITORY_ROOT/dataflow.out/rib/rib-north.stl"
+if [ -f "$FILE_RIB_STL_NORTH" ]; then
+    cp "$FILE_RIB_STL_NORTH" "$DIRECTORY_OUTPUT/rib-north.stl"
+    echo "site-build: copied the north rib STL"
+fi
+FILE_RIB_STL_SOUTH="$REPOSITORY_ROOT/dataflow.out/rib/rib-south.stl"
+if [ -f "$FILE_RIB_STL_SOUTH" ]; then
+    cp "$FILE_RIB_STL_SOUTH" "$DIRECTORY_OUTPUT/rib-south.stl"
+    echo "site-build: copied the south rib STL"
 fi
 exit 0

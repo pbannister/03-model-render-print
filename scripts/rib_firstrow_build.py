@@ -7,52 +7,49 @@
 # to assemble and align, so it is dropped.  The replacement plan assembles
 # the north and south hemispheres independently, then joins them at the
 # equator.  Each hemisphere starts from a full-diameter reinforcing rib that
-# sits just above (north) or just below (south) the equator and presses
-# against the inner (bottom) faces of that hemisphere's first row of tiles,
-# fixing their placement and preventing cumulative error around the seam.
+# sits just above (north) or just below (south) the equator and whose outer
+# face(s) make full contact with the inner (flat-bottom) faces of that
+# hemisphere's first row of tiles, fixing their placement and preventing
+# cumulative error around the seam.
 #
-# The rib is a rectangular-cross-section ring (see documents/05-stl-approach.md):
-#   - outer face at the sea-level diameter (200 mm, R = 100 mm),
-#   - inside diameter 20 mm less (180 mm) -> 10 mm radial width,
-#   - 10 mm axial thickness.
-# It is a single full ring used for both hemispheres (flip it for the other).
+# The rib's outer surface is NOT a cylinder: it is a series of flat facets,
+# one per first-row tile, each lying in that tile's bottom plane, so each
+# facet mates flush with the tile's inner face.  The rib is otherwise a
+# rectangular ring: inner diameter 180 mm (inner radius 90 mm) and 10 mm
+# axial thickness.
 #
-# This tool renders the two ribs + the first-row tiles so the plan can be
-# seen, and also writes the rib's own binary STL for printing:
-#   - dataflow.out/rib/rib-firstrow.obj  (grouped web-view model)
-#   - dataflow.out/rib/rib.stl           (the printable reinforcing rib)
-#   - dataflow.out/rib/rib.json          (manifest)
+# Outputs under dataflow.out/rib/:
+#   - rib-firstrow.obj   grouped web-view model (ribs + first-row tiles)
+#   - rib-north.stl      the printable north rib (bottom at z = 0)
+#   - rib-south.stl      the printable south rib (bottom at z = 0)
+#   - rib.json           manifest
 #
-# The tiles are the real tile shells (chamfered walls, flat bottoms) built
-# with stl_tiles_build.build_mesh at uniform relief so only the assembly
-# placement matters here.
+# The facets are sized from the real elevation field (same pipeline as the
+# tile build), so they match the tiles' actual bottom planes.  --sample-degrees
+# defaults to 1.0 for a light web view; use 0.25 to match the production
+# tile build exactly (the view OBJ then gets much larger).
 #
-# Usage: rib_firstrow_build.py [--radius-mm N] [--base-mm N] ...
+# Usage: rib_firstrow_build.py [--sample-degrees N] [--relief-mm N] ...
 import argparse
 import json
 import math
 import os
+import shutil
 import sys
+import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import stl_tiles_build as tiles  # noqa: E402
 
-RIB_OUTER_RADIUS_MM = 100.0   # outer face at the sea-level diameter (200 mm)
-RIB_INNER_RADIUS_MM = 90.0    # inside diameter 20 mm less -> 10 mm width
-RIB_THICKNESS_MM = 10.0       # axial thickness
-RIB_SEGMENTS = 256            # circle samples (print smoothness)
+RIB_INNER_RADIUS_MM = 90.0   # inside diameter 180 mm (20 mm less than sea level)
+RIB_THICKNESS_MM = 10.0      # axial thickness
 EQUATOR_HALF_THICKNESS_MM = 0.25
 EQUATOR_INNER_RADIUS_MM = 99.5
 EQUATOR_OUTER_RADIUS_MM = 100.5
 
 
 def local_to_world(point, frame, z_bottom):
-    """build_mesh local point (bottom at z = 0) -> world coordinates.
-
-    build_mesh returns triangles in a tile-local frame whose origin is the
-    globe centre and whose bottom plane has been translated to local z = 0;
-    this undoes that translate and rotates into world space.
-    """
+    """build_mesh local point (bottom at z = 0) -> world coordinates."""
     east, north, up = frame
     lx, ly, lz = point
     z_original = lz + z_bottom
@@ -64,12 +61,7 @@ def local_to_world(point, frame, z_bottom):
 
 
 def rectangular_ring_mesh(inner_radius, outer_radius, z_min, z_max, segments):
-    """Watertight ring of rectangular cross-section, centred on the z-axis.
-
-    The cross-section is the rectangle [inner_radius, outer_radius] x
-    [z_min, z_max], revolved around the z-axis.  Triangles are wound with
-    outward normals (right-hand rule) so the result is a closed solid.
-    """
+    """Watertight ring of rectangular cross-section, centred on the z-axis."""
     triangles = []
 
     def outer(u, z):
@@ -81,32 +73,24 @@ def rectangular_ring_mesh(inner_radius, outer_radius, z_min, z_max, segments):
     for i in range(segments):
         u0 = 2.0 * math.pi * i / segments
         u1 = 2.0 * math.pi * (i + 1) / segments
-
-        # outer cylindrical wall (normal +radial)
         p0 = outer(u0, z_min)
         p1 = outer(u1, z_min)
         p2 = outer(u1, z_max)
         p3 = outer(u0, z_max)
         triangles.append((p0, p1, p2))
         triangles.append((p0, p2, p3))
-
-        # inner cylindrical wall (normal -radial, toward the axis)
         q0 = inner(u0, z_min)
         q1 = inner(u1, z_min)
         q2 = inner(u1, z_max)
         q3 = inner(u0, z_max)
         triangles.append((q0, q2, q1))
         triangles.append((q0, q3, q2))
-
-        # top annulus (normal +z)
         t0 = inner(u0, z_max)
         t1 = outer(u0, z_max)
         t2 = outer(u1, z_max)
         t3 = inner(u1, z_max)
         triangles.append((t0, t1, t2))
         triangles.append((t0, t2, t3))
-
-        # bottom annulus (normal -z)
         b0 = inner(u0, z_min)
         b1 = outer(u0, z_min)
         b2 = outer(u1, z_min)
@@ -116,27 +100,104 @@ def rectangular_ring_mesh(inner_radius, outer_radius, z_min, z_max, segments):
     return triangles
 
 
-def count_unshared_edges(triangles):
-    """Number of edges not shared by exactly two faces (0 = watertight)."""
-    edges = {}
-    for point_a, point_b, point_c in triangles:
-        for start, end in ((point_a, point_b), (point_b, point_c),
-                           (point_c, point_a)):
-            key_start = (round(start[0], 6), round(start[1], 6),
-                         round(start[2], 6))
-            key_end = (round(end[0], 6), round(end[1], 6), round(end[2], 6))
-            key = (key_start, key_end) if key_start <= key_end \
-                else (key_end, key_start)
-            edges[key] = edges.get(key, 0) + 1
-    return sum(1 for count in edges.values() if count != 2)
+def facet_vertex(up, z_bottom, lon_degrees, z):
+    """Intersection of the tile bottom plane with a longitude plane and z."""
+    lam = math.radians(lon_degrees)
+    c = math.cos(lam)
+    s = math.sin(lam)
+    denom = up[0] * c + up[1] * s
+    if abs(denom) < 1e-12:
+        raise RuntimeError("degenerate rib facet")
+    radius = (z_bottom - up[2] * z) / denom
+    return (radius * c, radius * s, z)
 
 
-def build_row(tiles_row, radius_mm, base_mm, sample_degrees):
-    """World-space triangle soup for a row of first-row tiles."""
+def build_rib(tiles_row, z_min, z_max, radius_mm, base_mm, sampler,
+              sample_degrees):
+    """Faceted rib for one hemisphere; returns a closed triangle soup.
+
+    Each first-row tile contributes one outer facet: a quad in the tile's
+    bottom plane.  Because the first-row tiles all reach sea level at their
+    equator edge, they share one z_bottom, so adjacent facets meet exactly
+    along the shared chamfer wall and the rib is a clean 12-facet ring (no
+    steps between facets).
+    """
+    planes = []
+    for tile in tiles_row:
+        latitudes, longitudes = tiles.grid_lines(tile, sample_degrees)
+        elevation_mm = sampler(latitudes, longitudes)
+        center_lat, center_lon = tiles.tile_center(tile)
+        frame = tiles.local_frame(center_lat, center_lon)
+        up = tiles.unit_radial(center_lat, center_lon)
+        top = tiles.top_grid(tile, latitudes, longitudes, elevation_mm,
+                             radius_mm, frame)
+        z_bottom = min(point[2] for row in top for point in row) - base_mm
+        planes.append((up, z_bottom, tile["lon_min"], tile["lon_max"]))
+
+    n = len(planes)
+    south_west, south_east = [], []
+    north_east, north_west = [], []
+    for (up, z_bottom, lon_min, lon_max) in planes:
+        south_west.append(facet_vertex(up, z_bottom, lon_min, z_min))
+        south_east.append(facet_vertex(up, z_bottom, lon_max, z_min))
+        north_east.append(facet_vertex(up, z_bottom, lon_max, z_max))
+        north_west.append(facet_vertex(up, z_bottom, lon_min, z_max))
+
+    # The first-row tiles share one z_bottom (all touch the ocean at their
+    # equator edge), so a tile's east corners coincide with its east
+    # neighbour's west corners; warn if that assumption breaks.
+    max_gap = 0.0
+    for k in range(n):
+        k_next = (k + 1) % n
+        max_gap = max(max_gap, _distance(south_east[k], south_west[k_next]),
+                      _distance(north_east[k], north_west[k_next]))
+    if max_gap > 0.02:
+        print("rib-firstrow: warning: facet corners differ by %.3f mm "
+              "(steps between facets are not modelled)" % max_gap,
+              file=sys.stderr)
+
+    inner_bottom = []
+    inner_top = []
+    for k in range(n):
+        lam = math.radians(30.0 * k)
+        inner_bottom.append((RIB_INNER_RADIUS_MM * math.cos(lam),
+                             RIB_INNER_RADIUS_MM * math.sin(lam), z_min))
+        inner_top.append((RIB_INNER_RADIUS_MM * math.cos(lam),
+                          RIB_INNER_RADIUS_MM * math.sin(lam), z_max))
+
+    triangles = []
+
+    def quad(a, b, c, d):
+        triangles.append((a, b, c))
+        triangles.append((a, c, d))
+
+    for k in range(n):
+        k_next = (k + 1) % n
+        # outer facet in tile k's bottom plane (outward normal ~ +radial)
+        quad(south_west[k], south_east[k], north_east[k], north_west[k])
+        # top annulus sector (z = z_max; outward normal +z)
+        quad(north_west[k], north_east[k], inner_top[k_next], inner_top[k])
+        # bottom annulus sector (z = z_min; outward normal -z)
+        quad(inner_bottom[k], inner_bottom[k_next], south_east[k],
+             south_west[k])
+        # inner cylindrical wall (r = RIB_INNER_RADIUS_MM; normal toward axis)
+        quad(inner_bottom[k], inner_top[k], inner_top[k_next],
+             inner_bottom[k_next])
+    return triangles
+
+
+def _distance(point_a, point_b):
+    return math.sqrt((point_a[0] - point_b[0]) ** 2
+                     + (point_a[1] - point_b[1]) ** 2
+                     + (point_a[2] - point_b[2]) ** 2)
+
+
+def build_row(tiles_row, radius_mm, base_mm, sampler, sample_degrees):
+    """World-space triangle soup for a row of first-row tiles (real relief)."""
     world_pieces = []
     for tile in tiles_row:
         latitudes, longitudes = tiles.grid_lines(tile, sample_degrees)
-        elevation_mm = [[base_mm for _ in longitudes] for _ in latitudes]
+        elevation_mm = sampler(latitudes, longitudes)
         center_lat, center_lon = tiles.tile_center(tile)
         frame = tiles.local_frame(center_lat, center_lon)
         top = tiles.top_grid(tile, latitudes, longitudes, elevation_mm,
@@ -168,49 +229,98 @@ def write_obj(path, groups):
                 vertex_index += 3
 
 
+def count_unshared_edges(triangles):
+    """Number of edges not shared by exactly two faces (0 = watertight)."""
+    edges = {}
+    for point_a, point_b, point_c in triangles:
+        for start, end in ((point_a, point_b), (point_b, point_c),
+                           (point_c, point_a)):
+            key_start = (round(start[0], 6), round(start[1], 6),
+                         round(start[2], 6))
+            key_end = (round(end[0], 6), round(end[1], 6), round(end[2], 6))
+            key = (key_start, key_end) if key_start <= key_end \
+                else (key_end, key_start)
+            edges[key] = edges.get(key, 0) + 1
+    return sum(1 for count in edges.values() if count != 2)
+
+
+def translate_z(triangles, delta):
+    return [tuple((a[0], a[1], a[2] + delta) for a in tri)
+            for tri in triangles]
+
+
 def run_build(arguments):
-    all_tiles = tiles.plan_tiles(arguments.band_degrees)
-    north = [t for t in all_tiles if t["id"].startswith("tile-N00")]
-    south = [t for t in all_tiles if t["id"].startswith("tile-S30")]
-    if not north or not south:
-        raise RuntimeError("expected N00 and S30 first-row bands")
+    from osgeo import gdal
+    gdal.UseExceptions()
+    working = tempfile.mkdtemp(prefix="rib-firstrow-build-")
+    try:
+        path_vrt = tiles.build_vrt(arguments.source_dir, working)
+        grid, transform = tiles.load_global_grid(path_vrt,
+                                                 arguments.sample_degrees,
+                                                 working)
+        valid = [value for row in grid for value in row
+                 if value > tiles.NODATA_LIMIT]
+        if not valid:
+            raise RuntimeError("the global grid has no valid pixels")
+        elevation_min = float(min(valid))
+        elevation_max = float(max(valid))
+        parameters = {
+            "oceans_flat": arguments.oceans_flat,
+            "elev_min": None,
+            "elev_max": None,
+            "base_mm": arguments.base_mm,
+            "relief_mm": arguments.relief_mm,
+        }
 
-    rib_north = rectangular_ring_mesh(RIB_INNER_RADIUS_MM,
-                                      RIB_OUTER_RADIUS_MM, 0.0,
-                                      RIB_THICKNESS_MM, RIB_SEGMENTS)
-    rib_south = rectangular_ring_mesh(RIB_INNER_RADIUS_MM,
-                                      RIB_OUTER_RADIUS_MM, -RIB_THICKNESS_MM,
-                                      0.0, RIB_SEGMENTS)
-    equator_ring = rectangular_ring_mesh(EQUATOR_INNER_RADIUS_MM,
-                                         EQUATOR_OUTER_RADIUS_MM,
-                                         -EQUATOR_HALF_THICKNESS_MM,
-                                         EQUATOR_HALF_THICKNESS_MM,
-                                         RIB_SEGMENTS)
+        def sampler(latitudes, longitudes):
+            elevations = tiles.sample_grid(grid, transform, latitudes,
+                                           longitudes)
+            return [[tiles.elevation_to_mm(value, elevation_min,
+                                           elevation_max, parameters)
+                     for value in row] for row in elevations]
 
-    groups = [("rib-north", rib_north), ("rib-south", rib_south),
-              ("equator", equator_ring)]
-    groups.extend(build_row(north, arguments.radius_mm, arguments.base_mm,
-                            arguments.sample_degrees))
-    groups.extend(build_row(south, arguments.radius_mm, arguments.base_mm,
-                            arguments.sample_degrees))
+        all_tiles = tiles.plan_tiles(arguments.band_degrees)
+        north = [t for t in all_tiles if t["id"].startswith("tile-N00")]
+        south = [t for t in all_tiles if t["id"].startswith("tile-S30")]
+        if not north or not south:
+            raise RuntimeError("expected N00 and S30 first-row bands")
+
+        rib_north = build_rib(north, 0.0, RIB_THICKNESS_MM,
+                              arguments.radius_mm, arguments.base_mm,
+                              sampler, arguments.sample_degrees)
+        rib_south = build_rib(south, -RIB_THICKNESS_MM, 0.0,
+                              arguments.radius_mm, arguments.base_mm,
+                              sampler, arguments.sample_degrees)
+        equator_ring = rectangular_ring_mesh(EQUATOR_INNER_RADIUS_MM,
+                                             EQUATOR_OUTER_RADIUS_MM,
+                                             -EQUATOR_HALF_THICKNESS_MM,
+                                             EQUATOR_HALF_THICKNESS_MM, 128)
+
+        groups = [("rib-north", rib_north), ("rib-south", rib_south),
+                  ("equator", equator_ring)]
+        groups.extend(build_row(north, arguments.radius_mm, arguments.base_mm,
+                                sampler, arguments.sample_degrees))
+        groups.extend(build_row(south, arguments.radius_mm, arguments.base_mm,
+                                sampler, arguments.sample_degrees))
+    finally:
+        shutil.rmtree(working, ignore_errors=True)
 
     os.makedirs(arguments.output_dir, exist_ok=True)
     path_obj = os.path.join(arguments.output_dir, "rib-firstrow.obj")
     write_obj(path_obj, groups)
 
-    # The printable rib: a single full ring, bottom at z = 0 (bed plane).
-    # It is symmetric, so the same part serves the north and south assembly
-    # (flip it over for the other hemisphere).
-    rib_stl = rectangular_ring_mesh(RIB_INNER_RADIUS_MM, RIB_OUTER_RADIUS_MM,
-                                    0.0, RIB_THICKNESS_MM, RIB_SEGMENTS)
-    volume = tiles.signed_volume(rib_stl)
-    expected_volume = (math.pi
-                       * (RIB_OUTER_RADIUS_MM ** 2 - RIB_INNER_RADIUS_MM ** 2)
-                       * RIB_THICKNESS_MM)
-    unshared = count_unshared_edges(rib_stl)
-    path_stl = os.path.join(arguments.output_dir, "rib.stl")
-    tiles.write_stl(path_stl, rib_stl,
-                    "model-render-print reinforcing rib (R100/R90 x 10 mm)")
+    # Printable ribs: both sit flat with the bottom at z = 0.  The north rib
+    # already spans z in [0, 10]; the south rib spans [-10, 0] in world space,
+    # so it is translated up for printing.
+    rib_south_print = translate_z(rib_south, RIB_THICKNESS_MM)
+    volume_north = tiles.signed_volume(rib_north)
+    volume_south = tiles.signed_volume(rib_south_print)
+    path_stl_north = os.path.join(arguments.output_dir, "rib-north.stl")
+    path_stl_south = os.path.join(arguments.output_dir, "rib-south.stl")
+    tiles.write_stl(path_stl_north, rib_north,
+                    "model-render-print north rib (faceted, R90 inner)")
+    tiles.write_stl(path_stl_south, rib_south_print,
+                    "model-render-print south rib (faceted, R90 inner)")
 
     total_triangles = sum(len(triangles) for _, triangles in groups)
     manifest = {
@@ -220,21 +330,28 @@ def run_build(arguments):
             "band_degrees": arguments.band_degrees,
             "radius_mm": arguments.radius_mm,
             "base_mm": arguments.base_mm,
+            "relief_mm": arguments.relief_mm,
+            "oceans_flat": arguments.oceans_flat,
             "sample_degrees": arguments.sample_degrees,
-            "rib_outer_radius_mm": RIB_OUTER_RADIUS_MM,
             "rib_inner_radius_mm": RIB_INNER_RADIUS_MM,
-            "rib_width_mm": RIB_OUTER_RADIUS_MM - RIB_INNER_RADIUS_MM,
-            "rib_thickness_mm": RIB_THICKNESS_MM,
-            "rib_outer_diameter_mm": 2.0 * RIB_OUTER_RADIUS_MM,
             "rib_inner_diameter_mm": 2.0 * RIB_INNER_RADIUS_MM,
+            "rib_thickness_mm": RIB_THICKNESS_MM,
+            "rib_outer": "faceted (one facet per first-row tile bottom plane)",
         },
-        "rib_stl": {
-            "file": "rib.stl",
-            "triangles": len(rib_stl),
-            "volume_mm3": round(volume, 3),
-            "expected_volume_mm3": round(expected_volume, 3),
-            "unshared_edges": unshared,
-        },
+        "rib_stl": [
+            {
+                "file": "rib-north.stl",
+                "triangles": len(rib_north),
+                "volume_mm3": round(volume_north, 3),
+                "unshared_edges": count_unshared_edges(rib_north),
+            },
+            {
+                "file": "rib-south.stl",
+                "triangles": len(rib_south_print),
+                "volume_mm3": round(volume_south, 3),
+                "unshared_edges": count_unshared_edges(rib_south_print),
+            },
+        ],
         "groups": [{"name": name, "triangles": len(triangles)}
                    for name, triangles in groups],
         "total_triangles": total_triangles,
@@ -243,23 +360,32 @@ def run_build(arguments):
     with open(path_manifest, "w") as handle:
         json.dump(manifest, handle, indent=4)
         handle.write("\n")
-    print("rib-firstrow: wrote %s, %s and %s (%d groups, %d triangles; rib "
-          "volume %.1f mm^3)" % (path_obj, path_stl, path_manifest,
-                                 len(groups), total_triangles, volume))
+    print("rib-firstrow: wrote %s, %s, %s and %s (%d groups, %d triangles; "
+          "rib volumes %.1f / %.1f mm^3)" % (path_obj, path_stl_north,
+                                             path_stl_south, path_manifest,
+                                             len(groups), total_triangles,
+                                             volume_north, volume_south))
     return 0
 
 
 def build_parser():
     parser = argparse.ArgumentParser(
         prog="rib_firstrow_build",
-        description="Render the rib + first-row assembly visualization and "
-                    "the rib STL.")
+        description="Render the faceted rib + first-row assembly "
+                    "visualization and the rib STLs.")
+    parser.add_argument("--source-dir", default="/datasets/dataset-etopo-2022",
+                        help="ETOPO 2022 source tile directory")
     parser.add_argument("--output-dir", default=None,
                         help="output directory (default: dataflow.out/rib)")
     parser.add_argument("--band-degrees", type=float, default=30.0)
     parser.add_argument("--radius-mm", type=float, default=100.0)
     parser.add_argument("--base-mm", type=float, default=3.0)
-    parser.add_argument("--sample-degrees", type=float, default=1.0)
+    parser.add_argument("--relief-mm", type=float, default=10.0)
+    parser.add_argument("--sample-degrees", type=float, default=1.0,
+                        help="grid spacing (1.0 for a light view; 0.25 to "
+                             "match the production tile build)")
+    parser.add_argument("--oceans-flat", action="store_true", default=True,
+                        help="clamp water-covered cells to sea level")
     return parser
 
 
