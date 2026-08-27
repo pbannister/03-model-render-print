@@ -75,6 +75,7 @@ page_title() {
     case "$name_base" in
         index)     echo "Model Render Print" ;;
         dashboard) echo "Dashboard" ;;
+        frame)     echo "Assembly Frame" ;;
         *)         echo "$name_base" ;;
     esac
 }
@@ -120,4 +121,12 @@ for file_asset in "$DIRECTORY_INPUT"/*; do
 done
 
 echo "site-build: copied $count_assets asset(s) into $DIRECTORY_OUTPUT"
+
+# Copy the generated assembly-frame model (if present) so the frame page
+# can load it; it lives in dataflow.out/ (generated, not version-controlled).
+FILE_FRAME_MODEL="$REPOSITORY_ROOT/dataflow.out/frame/frame-assembled.obj"
+if [ -f "$FILE_FRAME_MODEL" ]; then
+    cp "$FILE_FRAME_MODEL" "$DIRECTORY_OUTPUT/frame-assembled.obj"
+    echo "site-build: copied the assembly-frame model"
+fi
 exit 0

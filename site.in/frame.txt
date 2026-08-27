@@ -1,0 +1,53 @@
+<h2>Assembly Frame</h2>
+<p>The internal assembly frame for the printable Earth: a central hub with
+one strut per tile, each strut ending in a pad that sits on the tile's flat
+bottom face. The frame aligns every tile at its exact spherical position
+(the pads match each tile's bottom outline, so rotation is fixed too) and
+stiffens the assembled globe. Drag to rotate, scroll to zoom; the faint
+wireframe sphere is the globe's surface (R = 100 mm).</p>
+<div id="frame-legend" class="frame-legend"></div>
+<div id="frame-viewport" class="frame-viewport">
+  <canvas id="frame-canvas"></canvas>
+</div>
+<p id="frame-status" class="frame-status">loading…</p>
+<style>
+#frame-viewport {
+    width: 100%;
+    height: 480px;
+    background: #0a1030;
+    border-radius: 4px;
+    overflow: hidden;
+}
+#frame-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    touch-action: none;
+    cursor: grab;
+}
+#frame-canvas:active {
+    cursor: grabbing;
+}
+.frame-legend {
+    margin: 0.4em 0 0.8em;
+    line-height: 2;
+}
+.frame-legend-entry {
+    margin-right: 1em;
+    font-size: 0.9em;
+    color: #444;
+}
+.frame-swatch {
+    display: inline-block;
+    width: 0.8em;
+    height: 0.8em;
+    border-radius: 2px;
+    margin-right: 0.35em;
+    vertical-align: -0.1em;
+}
+.frame-status {
+    font-size: 0.9em;
+    color: #666;
+}
+</style>
+<script type="module" src="./frame-view.js"></script>
