@@ -213,6 +213,58 @@ def to_local(point, frame):
     return (dot(point, east), dot(point, north), dot(point, up))
 
 
+def rib_key_strip_local(tile, z_bottom, world_z_min, world_z_max, width_mm):
+    """The tile-to-ring key strip on the tile's bottom face, in tile-local
+    coordinates with the bottom plane at up = 0.
+
+    The strip is a rectangle spanning `width_mm` east-west (centred on the
+    tile's centre longitude) and the rib facet's full height north-south.
+    Returns (north_west, north_east, south_west, south_east).
+    """
+    center_lat, center_lon = tile_center(tile)
+    frame = local_frame(center_lat, center_lon)
+    up = unit_radial(center_lat, center_lon)
+
+    def corner(lon_degrees, world_z):
+        lam = math.radians(lon_degrees)
+        c = math.cos(lam)
+        s = math.sin(lam)
+        denom = up[0] * c + up[1] * s
+        if abs(denom) < 1e-12:
+            raise ValueError("degenerate rib facet")
+        radius = (z_bottom - up[2] * world_z) / denom
+        world = (radius * c, radius * s, world_z)
+        local = to_local(world, frame)
+        return (local[0], local[1], 0.0)
+
+    south_west = corner(tile["lon_min"], world_z_min)
+    south_east = corner(tile["lon_max"], world_z_min)
+    north_east = corner(tile["lon_max"], world_z_max)
+    north_west = corner(tile["lon_min"], world_z_max)
+
+    width_facet = math.sqrt(
+        (north_east[0] - north_west[0]) ** 2
+        + (north_east[1] - north_west[1]) ** 2
+    )
+    half = 0.5 * width_mm / width_facet
+    u_min = 0.5 - half
+    u_max = 0.5 + half
+
+    def lerp(point_a, point_b, t):
+        return (
+            point_a[0] + (point_b[0] - point_a[0]) * t,
+            point_a[1] + (point_b[1] - point_a[1]) * t,
+            0.0,
+        )
+
+    return (
+        lerp(north_west, north_east, u_min),
+        lerp(north_west, north_east, u_max),
+        lerp(south_west, south_east, u_min),
+        lerp(south_west, south_east, u_max),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Grid sampling plan (pure Python).
 # ---------------------------------------------------------------------------
@@ -348,6 +400,76 @@ KEY_LENS_RISE_MM = 3.5  # depth rises to its maximum over 3.5 mm
 KEY_LENS_BOTTOM_MM = 1.5  # key depth is 0 in the bottom 1.5 mm
 KEY_LENS_FALL_MM = 3.5  # depth falls to 0 over 3.5 mm
 GROOVE_DEPTH_MM = 0.6  # underside mark groove depth
+
+# Tile-to-ring key (rib fin / tile-back socket) trapezoid profile, in
+# fractions of the facet height (v = 0 at the equator edge, 1 at the top).
+RIB_KEY_V_BASE_LO = 0.15   # fin/socket base starts here
+RIB_KEY_V_TOP_LO = 0.35    # reaches full depth here
+RIB_KEY_V_TOP_HI = 0.65    # leaves full depth here
+RIB_KEY_V_BASE_HI = 0.85   # base ends here
+
+
+def trapezoid_key_triangles(p_a, p_b, q_a, q_b, direction, depth,
+                            side_low, side_high):
+    """Trapezoidal key (fin or socket) protruding `direction` by `depth`.
+
+    p_a/p_b are the strip's top edge, q_a/q_b its bottom edge.  The key
+    occupies the middle of the strip height with 45-degree chamfered ends
+    (no horizontal faces), so it prints without supports.  Outward winding.
+    """
+    b0 = RIB_KEY_V_BASE_LO
+    t0 = RIB_KEY_V_TOP_LO
+    t1 = RIB_KEY_V_TOP_HI
+    b1 = RIB_KEY_V_BASE_HI
+
+    def bilinear(u, v):
+        top = (
+            (1.0 - u) * p_a[0] + u * p_b[0],
+            (1.0 - u) * p_a[1] + u * p_b[1],
+            (1.0 - u) * p_a[2] + u * p_b[2],
+        )
+        bottom = (
+            (1.0 - u) * q_a[0] + u * q_b[0],
+            (1.0 - u) * q_a[1] + u * q_b[1],
+            (1.0 - u) * q_a[2] + u * q_b[2],
+        )
+        return (
+            (1.0 - v) * top[0] + v * bottom[0],
+            (1.0 - v) * top[1] + v * bottom[1],
+            (1.0 - v) * top[2] + v * bottom[2],
+        )
+
+    def shift(point):
+        return (point[0] + depth * direction[0],
+                point[1] + depth * direction[1],
+                point[2] + depth * direction[2])
+
+    triangles = []
+    # strip above/below the key stays flat
+    triangles.extend(quad_triangles(
+        p_b, p_a, bilinear(0.0, b0), bilinear(1.0, b0)))
+    triangles.extend(quad_triangles(
+        bilinear(0.0, b1), q_a, q_b, bilinear(1.0, b1)))
+    # key face and chamfers
+    triangles.extend(quad_triangles(
+        shift(bilinear(0.0, t0)), shift(bilinear(0.0, t1)),
+        shift(bilinear(1.0, t1)), shift(bilinear(1.0, t0))))
+    triangles.extend(quad_triangles(
+        bilinear(0.0, b0), shift(bilinear(0.0, t0)),
+        shift(bilinear(1.0, t0)), bilinear(1.0, b0)))
+    triangles.extend(quad_triangles(
+        shift(bilinear(0.0, t1)), bilinear(0.0, b1),
+        bilinear(1.0, b1), shift(bilinear(1.0, t1))))
+    # side faces
+    if side_low:
+        triangles.extend(quad_triangles(
+            bilinear(0.0, b0), bilinear(0.0, b1),
+            shift(bilinear(0.0, t1)), shift(bilinear(0.0, t0))))
+    if side_high:
+        triangles.extend(quad_triangles(
+            bilinear(1.0, b1), bilinear(1.0, b0),
+            shift(bilinear(1.0, t0)), shift(bilinear(1.0, t1))))
+    return triangles
 
 
 def key_plan_for_tile(tile, band_degrees):

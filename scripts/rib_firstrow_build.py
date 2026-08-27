@@ -156,6 +156,14 @@ def build_rib(tiles_row, z_min, z_max, radius_mm, base_mm, sampler,
               "(steps between facets are not modelled)" % max_gap,
               file=sys.stderr)
 
+    # Uniform facet subdivision (the facets all have the same width).
+    facet_width = _distance(north_west[0], north_east[0])
+    segment_count = max(5, int(round(facet_width / tiles.KEY_STUD_WIDTH_MM)))
+    fin_segments = max(1, int(round(
+        tiles.KEY_STUD_WIDTH_MM * segment_count / facet_width)))
+    fin_start = (segment_count - fin_segments) // 2
+    fin_end = fin_start + fin_segments
+
     inner_bottom = []
     inner_top = []
     for k in range(n):
@@ -167,22 +175,113 @@ def build_rib(tiles_row, z_min, z_max, radius_mm, base_mm, sampler,
 
     triangles = []
 
-    def quad(a, b, c, d):
-        triangles.append((a, b, c))
-        triangles.append((a, c, d))
-
     for k in range(n):
         k_next = (k + 1) % n
-        # outer facet in tile k's bottom plane (outward normal ~ +radial)
-        quad(south_west[k], south_east[k], north_east[k], north_west[k])
-        # top annulus sector (z = z_max; outward normal +z)
-        quad(north_west[k], north_east[k], inner_top[k_next], inner_top[k])
-        # bottom annulus sector (z = z_min; outward normal -z)
-        quad(inner_bottom[k], inner_bottom[k_next], south_east[k],
-             south_west[k])
+        top_pts = [_lerp3(north_west[k], north_east[k], i / segment_count)
+                   for i in range(segment_count + 1)]
+        bot_pts = [_lerp3(south_west[k], south_east[k], i / segment_count)
+                   for i in range(segment_count + 1)]
+        # outer facet strip (with the centred fin)
+        triangles.extend(_facet_strip(top_pts, bot_pts, fin_start, fin_end,
+                                      planes[k][0]))
+        # top annulus (fan from the inner vertex over the subdivided edge)
+        triangles.extend(_annulus_fan(inner_top[k], inner_top[k_next],
+                                      top_pts, flip=False))
+        # bottom annulus (fan, reversed winding for the -z outward normal)
+        triangles.extend(_annulus_fan(inner_bottom[k], inner_bottom[k_next],
+                                      bot_pts, flip=True))
         # inner cylindrical wall (r = RIB_INNER_RADIUS_MM; normal toward axis)
-        quad(inner_bottom[k], inner_top[k], inner_top[k_next],
-             inner_bottom[k_next])
+        triangles.extend(tiles.quad_triangles(
+            inner_bottom[k], inner_top[k], inner_top[k_next],
+            inner_bottom[k_next]))
+    return triangles
+
+
+def _lerp3(point_a, point_b, t):
+    return (point_a[0] + (point_b[0] - point_a[0]) * t,
+            point_a[1] + (point_b[1] - point_a[1]) * t,
+            point_a[2] + (point_b[2] - point_a[2]) * t)
+
+
+def _facet_strip(top_pts, bot_pts, fin_start, fin_end, direction):
+    """Facet strip with a centred lens fin; returns triangles."""
+    segment_count = len(top_pts) - 1
+    triangles = []
+    for i in range(segment_count):
+        p_a = top_pts[i]
+        p_b = top_pts[i + 1]
+        q_a = bot_pts[i]
+        q_b = bot_pts[i + 1]
+        if fin_start <= i < fin_end:
+            triangles.extend(_fin_bump(p_a, p_b, q_a, q_b, direction,
+                                       i == fin_start, i == fin_end - 1))
+        elif i == fin_start - 1:
+            triangles.extend(_fan_transition(p_a, p_b, q_a, q_b, "low"))
+        elif i == fin_end:
+            triangles.extend(_fan_transition(p_a, p_b, q_a, q_b, "high"))
+        else:
+            triangles.extend(tiles.quad_triangles(q_a, q_b, p_b, p_a))
+    return triangles
+
+
+FIN_V_BASE_LO = tiles.RIB_KEY_V_BASE_LO
+FIN_V_TOP_LO = tiles.RIB_KEY_V_TOP_LO
+FIN_V_TOP_HI = tiles.RIB_KEY_V_TOP_HI
+FIN_V_BASE_HI = tiles.RIB_KEY_V_BASE_HI
+
+
+def _fin_bump(p_a, p_b, q_a, q_b, direction, side_low, side_high):
+    """Trapezoidal fin protruding `direction` from one facet segment."""
+    return tiles.trapezoid_key_triangles(
+        p_a, p_b, q_a, q_b, direction, tiles.KEY_STUD_HEIGHT_MM,
+        side_low, side_high)
+
+
+def _fan_transition(p_a, p_b, q_a, q_b, side):
+    """Fan a plain facet segment against a neighbouring fin's side profile.
+
+    p_a/p_b are the segment's top edge, q_a/q_b its bottom edge.  For the
+    "low" side the fin lies to the east (shared edge p_b->q_b); for "high"
+    it lies to the west (shared edge p_a->q_a).
+    """
+    if side == "low":
+        far_top, far_bot = p_a, q_a
+        shared_top, shared_bot = p_b, q_b
+    else:
+        far_top, far_bot = p_b, q_b
+        shared_top, shared_bot = p_a, q_a
+    splits = [_lerp3(shared_top, shared_bot, v)
+              for v in (FIN_V_BASE_LO, FIN_V_BASE_HI)]
+    if side == "low":
+        return [
+            (far_top, splits[0], shared_top),
+            (far_top, splits[1], splits[0]),
+            (far_top, shared_bot, splits[1]),
+            (far_top, far_bot, shared_bot),
+        ]
+    return [
+        (far_top, shared_top, splits[0]),
+        (far_top, splits[0], splits[1]),
+        (far_top, splits[1], shared_bot),
+        (far_top, shared_bot, far_bot),
+    ]
+
+
+def _annulus_fan(inner_a, inner_b, edge_pts, flip):
+    """Fan an annulus sector from inner_a over a subdivided outer edge."""
+    triangles = []
+    count = len(edge_pts) - 1
+    for i in range(count):
+        a = edge_pts[i]
+        b = edge_pts[i + 1]
+        if flip:
+            triangles.append((inner_a, b, a))
+        else:
+            triangles.append((inner_a, a, b))
+    if flip:
+        triangles.append((inner_a, inner_b, edge_pts[count]))
+    else:
+        triangles.append((inner_a, edge_pts[count], inner_b))
     return triangles
 
 
