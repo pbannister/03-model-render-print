@@ -126,7 +126,10 @@ of latitude and longitude; each tile is an STL file that:
 - The rib is not a smooth ring: its outer surface is a series of flat
   facets, one per first-row tile, each lying in that tile's bottom plane, so
   the rib's outer faces make full contact with the tiles' inner (flat-bottom)
-  faces. Its inside diameter is 20 mm less than the sea-level diameter
+  faces. Each facet carries a centred trapezoidal **stud fin** (3 mm wide,
+  2 mm deep, chamfered ends) that seats into a matching socket cut in the
+  tile's underside, so the first row cannot slide sideways on the rib. Its
+  inside diameter is 20 mm less than the sea-level diameter
   (200 mm → 180 mm, inner radius 90 mm) and it is 10 mm thick. One rib is
   printed per hemisphere (`rib-north.stl` / `rib-south.stl`, both flat at
   z = 0).
