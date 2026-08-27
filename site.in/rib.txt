@@ -1,0 +1,62 @@
+<h2>Rib + first row</h2>
+<p>Replacement assembly plan (the internal hub-and-strut frame is dropped —
+it was too hard to assemble and align). The globe is built as two
+hemispheres, assembled independently, then joined at the equator.</p>
+<p>Each hemisphere starts from a <strong>reinforcing rib</strong> — a full
+ring around the entire diameter, sitting just above the equator (north) or
+just below it (south) — in contact with the inner (bottom) faces of that
+hemisphere's first row of tiles. The rib fixes the first row's position all
+the way around the seam, so there is no cumulative error: every subsequent
+row stacks up from a ring that is already true.</p>
+<p>Here the two ribs and both first rows are shown together (tiles are
+semi-transparent so you can see the ribs pressing against their inner faces):
+the red rib + yellow tiles are the northern hemisphere's start, the blue rib
++ teal tiles the southern hemisphere's. The thin grey ring marks the equator.
+Drag to rotate, scroll to zoom; the rotation axis is the Earth's polar axis.
+The faint wireframe sphere is the globe's outer surface (R = 100 mm).</p>
+<div id="rib-legend" class="rib-legend"></div>
+<div id="rib-viewport" class="rib-viewport">
+  <canvas id="rib-canvas"></canvas>
+</div>
+<p id="rib-status" class="rib-status">loading…</p>
+<style>
+#rib-viewport {
+    width: 100%;
+    height: 960px;
+    background: #0a1030;
+    border-radius: 4px;
+    overflow: hidden;
+}
+#rib-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    touch-action: none;
+    cursor: grab;
+}
+#rib-canvas:active {
+    cursor: grabbing;
+}
+.rib-legend {
+    margin: 0.4em 0 0.8em;
+    line-height: 2;
+}
+.rib-legend-entry {
+    margin-right: 1em;
+    font-size: 0.9em;
+    color: #444;
+}
+.rib-swatch {
+    display: inline-block;
+    width: 0.8em;
+    height: 0.8em;
+    border-radius: 2px;
+    margin-right: 0.35em;
+    vertical-align: -0.1em;
+}
+.rib-status {
+    font-size: 0.9em;
+    color: #666;
+}
+</style>
+<script type="module" src="./rib-view.js"></script>

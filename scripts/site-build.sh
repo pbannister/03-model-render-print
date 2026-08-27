@@ -76,6 +76,7 @@ page_title() {
         index)     echo "Model Render Print" ;;
         dashboard) echo "Dashboard" ;;
         frame)     echo "Assembly Frame" ;;
+        rib)       echo "Rib + First Row" ;;
         *)         echo "$name_base" ;;
     esac
 }
@@ -128,5 +129,13 @@ FILE_FRAME_MODEL="$REPOSITORY_ROOT/dataflow.out/frame/frame-assembled.obj"
 if [ -f "$FILE_FRAME_MODEL" ]; then
     cp "$FILE_FRAME_MODEL" "$DIRECTORY_OUTPUT/frame-assembled.obj"
     echo "site-build: copied the assembly-frame model"
+fi
+
+# Copy the generated rib + first-row model (if present) so the rib page
+# can load it; it lives in dataflow.out/ (generated, not version-controlled).
+FILE_RIB_MODEL="$REPOSITORY_ROOT/dataflow.out/rib/rib-firstrow.obj"
+if [ -f "$FILE_RIB_MODEL" ]; then
+    cp "$FILE_RIB_MODEL" "$DIRECTORY_OUTPUT/rib-firstrow.obj"
+    echo "site-build: copied the rib + first-row model"
 fi
 exit 0
