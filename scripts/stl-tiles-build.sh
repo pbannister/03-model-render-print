@@ -8,6 +8,7 @@
 # Usage:
 #   stl-tiles-build.sh build [options]   render tiles into dataflow.out/stl/
 #   stl-tiles-build.sh check             validate tiles against the manifest
+#   stl-tiles-build.sh --check           alias for check
 #
 # The Python module scripts/stl_tiles_build.py owns the pipeline; this script
 # owns the timestamped log file and passes its arguments through.

@@ -97,10 +97,10 @@ of latitude and longitude; each tile is an STL file that:
 - Globe assembly details: alignment keys, chamfers, or an assembly core
   (the interiors of tilted-up tiles leave small wedge gaps below the
   mating top surfaces).
-- Ocean treatment: a `--oceans-flat` option to clamp seafloor cells to sea
-  level for land-focused prints.
 - Print calibration: relief/base defaults tuned against a real print on the
   Elegoo Centauri Carbon (0.4 mm nozzle).
+- Larger fidelity: finer sample spacing (e.g. 0.1 degree) and/or smaller
+  band heights for regional tiles; watch STL size per tile.
 
 ## Decision log
 
@@ -129,6 +129,11 @@ of latitude and longitude; each tile is an STL file that:
 - 2026-08-26 — **Toolchain: GDAL 3.8.4 + Python 3 with osgeo/numpy**.
   Reason: available on this host (verified 2026-08-26); no custom reader
   needed.
+- 2026-08-26 — **Oceans: flat for now (`--oceans-flat` on the standard
+  run)**. Reason: the near-term prints are land-focused; seafloor relief is
+  deferred. Flat oceans clamp water-covered cells to 0 m elevation, so all
+  ocean cells map to one sea-level plateau height above the base and the
+  coastline rim stays visible; a flush-to-base variant remains possible.
 - 2026-08-26 — **Verification: watertightness (edge-manifold), flat bottom
   at z = 0, expected bounds, positive signed volume** via `make check`.
   Reason: these are the properties slicers rely on.

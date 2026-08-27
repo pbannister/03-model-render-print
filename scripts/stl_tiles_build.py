@@ -702,6 +702,9 @@ def build_parser():
     parser.add_argument("mode", nargs="?", default="build",
                         choices=("build", "check"),
                         help="build (default) or check the tile set")
+    parser.add_argument("--check", action="store_true",
+                        help="alias for the check mode: validate an "
+                             "existing tile set without rebuilding")
     parser.add_argument("--source-dir", default="/datasets/dataset-etopo-2022",
                         help="ETOPO 2022 source tile directory (default: "
                              "/datasets/dataset-etopo-2022)")
@@ -738,6 +741,8 @@ def build_parser():
 def main(argv=None):
     parser = build_parser()
     arguments = parser.parse_args(argv)
+    if arguments.check:
+        arguments.mode = "check"
     if arguments.output_dir is None:
         repository_root = os.path.dirname(os.path.dirname(
             os.path.abspath(__file__)))

@@ -130,5 +130,22 @@ middle = build.elevation_to_mm(0.0, -10994.0, 8849.0, parameters)
 assert mapped_low < middle < mapped_high
 assert build.elevation_to_mm(20000.0, -10994.0, 8849.0, parameters) == mapped_high
 
+# --- oceans-flat mapping ---------------------------------------------------
+# With oceans_flat, every water-covered cell (negative elevation) maps to
+# the same height as sea level: one smooth plateau, no seafloor relief.
+parameters_flat = dict(parameters)
+parameters_flat["oceans_flat"] = True
+sea_level_mm = build.elevation_to_mm(0.0, -10994.0, 8849.0, parameters_flat)
+assert abs(sea_level_mm
+           - (3.0 + 20.0 * (0.0 - (-10994.0)) / (8849.0 - (-10994.0)))) < 1e-9
+for value_ocean in (-10994.0, -5000.0, -1.0):
+    assert build.elevation_to_mm(value_ocean, -10994.0, 8849.0,
+                                 parameters_flat) == sea_level_mm, value_ocean
+assert build.elevation_to_mm(1.0, -10994.0, 8849.0,
+                             parameters_flat) > sea_level_mm
+assert build.elevation_to_mm(8849.0, -10994.0, 8849.0,
+                             parameters_flat) == mapped_high
+assert sea_level_mm > mapped_low, "the sea-level plateau sits above the base"
+
 print('04-stl-tiles-math: tiling math invariants ok')
 PY

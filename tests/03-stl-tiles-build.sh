@@ -44,11 +44,19 @@ sh "$SCRIPT_BUILD" build \
     --sample-degrees 1 \
     --radius-mm 50 \
     --relief-mm 10 \
-    --region 40 50 -125 -115 >/dev/null
+    --region 40 50 -125 -115 \
+    --oceans-flat >/dev/null
 
 if ! sh "$SCRIPT_BUILD" check \
         --output-dir "$DIRECTORY_OUTPUT_TEMPORARY" >/dev/null; then
     echo '03-stl-tiles-build: check failed' >&2
+    exit 1
+fi
+
+# the feature spec mandates the --check flag form as an alias for check
+if ! sh "$SCRIPT_BUILD" --check \
+        --output-dir "$DIRECTORY_OUTPUT_TEMPORARY" >/dev/null; then
+    echo '03-stl-tiles-build: --check alias failed' >&2
     exit 1
 fi
 
@@ -68,6 +76,7 @@ assert manifest["parameters"]["band_degrees"] == 10
 assert manifest["parameters"]["radius_mm"] == 50
 assert manifest["parameters"]["relief_mm"] == 10
 assert manifest["parameters"]["sample_degrees"] == 1
+assert manifest["parameters"]["oceans_flat"] is True
 
 assert len(manifest["tiles"]) >= 1, manifest["tiles"]
 for tile in manifest["tiles"]:

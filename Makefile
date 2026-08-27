@@ -4,7 +4,8 @@
 #	This Makefile is the human-facing driver.
 #	Each rule calls the appropriate tool instead of reimplementing work:
 #		build:  sh scripts/stl-tiles-build.sh (render the STL tile set)
-#		check:  sh scripts/stl-tiles-build.sh --check (validate tiles)
+#		        with --oceans-flat (flat oceans; see documents/05-stl-approach.md)
+#		check:  sh scripts/stl-tiles-build.sh check (validate tiles)
 #		site:   sh scripts/site-build.sh + sh scripts/site-condense.sh
 #		        (the standard page set; see prompts/features/02-project-pages.md)
 #		state:  sh scripts/site-state-fetch.sh (dataset + tile state)
@@ -18,10 +19,10 @@
 #
 
 build:
-	sh scripts/stl-tiles-build.sh
+	sh scripts/stl-tiles-build.sh build --oceans-flat
 
 check:
-	sh scripts/stl-tiles-build.sh --check
+	sh scripts/stl-tiles-build.sh check
 
 site:
 	sh scripts/site-build.sh

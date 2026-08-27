@@ -25,9 +25,6 @@
       wedge gaps when tiles are tilted up and joined. Decide whether to add
       alignment keys, chamfers, or an assembly core (see
       `documents/05-stl-approach.md`).
-* [ ] Ocean treatment: the default surface range renders seafloor
-      bathymetry as relief. Decide whether to add a `--oceans-flat` option
-      (clamp water-covered cells to sea level) for land-focused models.
 * [ ] Print calibration: verify one printed tile on the actual printer
       (Elegoo Centauri Carbon; see the workspace `profiles-elegoo-centauri-carbon`
       project) and tune relief/base defaults for the 0.4 mm nozzle.
@@ -36,6 +33,12 @@
 
 ## Recently Completed
 
+* [x] Decide the ocean treatment: flat for now (2026-08-26). The
+      `--oceans-flat` option clamps water-covered cells to sea level, so
+      oceans print as one smooth plateau (coastline rim visible); the
+      decision is logged in `documents/05-stl-approach.md`, the standard
+      run (`make build`) uses the flag, and the default full-globe set in
+      `dataflow.out/stl/` was rebuilt flat.
 * [x] Implement and verify the STL tile pipeline (2026-08-26): default
       full-globe run produced 42 watertight tiles (band 30 degrees,
       R = 100 mm, base 3 mm, relief 20 mm, 0.25-degree samples) into

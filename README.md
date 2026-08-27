@@ -72,6 +72,11 @@ All project features are defined in `prompts/features/` and implemented in `sour
 
 - `make build` renders the STL tile set into `dataflow.out/stl/` and writes
   `dataflow.out/stl/manifest.json` (tile list, parameters, provenance).
+- The standard build uses flat oceans (`--oceans-flat`): water-covered cells
+  are clamped to sea level, so ocean areas print as one smooth plateau
+  (decided 2026-08-26; see `documents/05-stl-approach.md`). Call
+  `scripts/stl-tiles-build.sh build` without the flag for a run with
+  seafloor relief.
 - Load one tile (or a region) into a slicer. Tiles are millimeters, origin
   at the tile's flat bottom (z = 0 is the bed plane).
 - `make check` re-validates every generated tile (watertight, flat bottom,
