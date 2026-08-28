@@ -28,6 +28,7 @@ const BAND_LABELS = {
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0a1030);
+const tileMeshes = [];
 const camera = new THREE.PerspectiveCamera(45, 1, 1, 4000);
 camera.up.set(0, 0, 1);  // Earth's rotation axis is +Z
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -119,12 +120,26 @@ async function loadModel() {
             transparent: isSupport,
             opacity: isSupport ? 0.55 : 1.0,
         });
-        scene.add(new THREE.Mesh(geometry, material));
+        const mesh = new THREE.Mesh(geometry, material);
+        scene.add(mesh);
+        if (!isSupport) {
+            tileMeshes.push(mesh);
+        }
         triangleCount += geometry.index.count / 3;
     }
     statusEl.textContent = 'support loaded: ' + triangleCount + ' triangles, '
         + Object.keys(geometries).length + ' pieces';
 }
+
+const toggleEl = document.getElementById('support-toggle-tiles');
+let tilesVisible = true;
+toggleEl.addEventListener('click', () => {
+    tilesVisible = !tilesVisible;
+    for (const mesh of tileMeshes) {
+        mesh.visible = tilesVisible;
+    }
+    toggleEl.textContent = tilesVisible ? 'Hide tiles' : 'Show tiles';
+});
 
 function buildLegend() {
     for (const [band, label] of Object.entries(BAND_LABELS)) {

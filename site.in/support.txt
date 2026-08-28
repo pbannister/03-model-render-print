@@ -6,13 +6,15 @@ solid; (2) a vertical (polar-axis) cylinder is subtracted from the solid —
 shell is 10 mm thick at the 60° row and thicker toward the equator;
 (3) the support is shown here with all rows of tiles of the hemisphere.</p>
 <p>The grey solid is the support (shown semi-transparent so you can see the
-tiles pressing against it): the shell is 60 mm thick at the equator, ~47 mm
-at the 30° row, and 10 mm at the 60° row; the 80 mm bore runs from the
-equator face up to where it meets the sphere (lat 66.4°), closing at the
-top. The tiles are the real relief tiles of the hemisphere (north: N00
-0–30°N, N30 30–60°N, N90 cap; the south is the mirror image). Drag to
-rotate, scroll to zoom; the rotation axis is the Earth's polar axis. The
-faint wireframe sphere is the globe's surface (R = 100 mm).</p>
+tiles pressing against it): the bore is a cone whose 160 mm base sits at
+the equator face and whose wall tilts inward at 45° as it ascends,
+narrowing to a point at z = 80 mm — the dome above the apex stays, so the
+bore is a conical pocket open at the equator. The tiles are the real
+relief tiles of the hemisphere (north: N00 0–30°N, N30 30–60°N, N90 cap;
+the south is the mirror image). Drag to rotate, scroll to zoom; the
+rotation axis is the Earth's polar axis. The faint wireframe sphere is the
+globe's surface (R = 100 mm).</p>
+<p><button id="support-toggle-tiles" type="button">Hide tiles</button></p>
 <div id="support-legend" class="support-legend"></div>
 <div id="support-viewport" class="support-viewport">
   <canvas id="support-canvas"></canvas>

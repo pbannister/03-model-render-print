@@ -75,21 +75,23 @@ def solid_hemisphere(radius_mm, north, sample_degrees):
     return triangles, len(equator)
 
 
-def shell_hemisphere(radius_mm, bore_radius_mm, north, sample_degrees):
-    """Solid hemisphere minus a central vertical (polar-axis) cylinder.
+def cone_bore_hemisphere(radius_mm, bore_diameter_mm, bore_angle_deg, north,
+                         sample_degrees):
+    """Solid hemisphere minus a conical bore.
 
-    The cylinder of radius `bore_radius_mm` runs through the whole solid:
-    the bore opens at the equator face and exits through the top — the
-    solid ends at the rim where the bore meets the sphere (lat phi_max =
-    acos(bore/radius), z = R sin phi_max), so the bore is open at both
-    ends.  Returns (triangles, boundary_count).
+    The bore is a cone whose base (diameter `bore_diameter_mm`) sits at the
+    equator face and whose wall tilts inward at `bore_angle_deg` from the
+    vertical as it ascends: radius(z) = base_radius - z*tan(angle), ending
+    at the apex where the radius reaches 0.  The dome above the apex stays,
+    so the bore is a conical pocket open only at the equator face.  Returns
+    (triangles, boundary_count).
     """
     count_lon = max(24, int(round(360.0 / sample_degrees)))
-    phi_max = math.acos(max(0.0, min(1.0, bore_radius_mm / radius_mm)))
-    lat_max = math.degrees(phi_max)
-    z_top = radius_mm * math.sin(phi_max)
+    base_radius = bore_diameter_mm / 2.0
+    slope = math.tan(math.radians(bore_angle_deg))
+    apex_z = base_radius / slope if slope > 1e-9 else 0.0
     sign = 1.0 if north else -1.0
-    count_lat = max(2, int(round(lat_max / sample_degrees)))
+    count_cone = max(2, int(round(apex_z / sample_degrees)))
 
     def sphere_point(lat, lon):
         phi = math.radians(lat)
@@ -100,26 +102,30 @@ def shell_hemisphere(radius_mm, bore_radius_mm, north, sample_degrees):
             sign * radius_mm * math.sin(phi),
         )
 
-    def cylinder_point(lon, z):
+    def cone_point(lon, z):
         lam = math.radians(lon)
-        return (
-            bore_radius_mm * math.cos(lam),
-            bore_radius_mm * math.sin(lam),
-            sign * z,
-        )
+        r = max(0.0, base_radius - z * slope)
+        return (r * math.cos(lam), r * math.sin(lam), sign * z)
 
     triangles = []
 
-    # sphere surface: rows from the equator up to lat_max
+    # sphere surface: rows from the equator to the pole, pole fan at the top
+    count_lat = max(2, int(round(90.0 / sample_degrees)))
     sphere_rows = []
     for i in range(count_lat + 1):
-        lat = lat_max * i / count_lat
+        lat = 90.0 * i / count_lat
         sphere_rows.append(
             [sphere_point(lat, 360.0 * j / count_lon) for j in range(count_lon)]
         )
     for i in range(count_lat):
         row_a = sphere_rows[i]
         row_b = sphere_rows[i + 1]
+        if i == count_lat - 1:
+            pole = row_b[0]
+            for j in range(count_lon):
+                j2 = (j + 1) % count_lon
+                triangles.append((row_a[j], row_a[j2], pole))
+            continue
         for j in range(count_lon):
             j2 = (j + 1) % count_lon
             a = row_a[j]
@@ -129,17 +135,23 @@ def shell_hemisphere(radius_mm, bore_radius_mm, north, sample_degrees):
             triangles.append((a, b, c))
             triangles.append((a, c, d))
 
-    # cylinder wall: from the equator face (z = 0) up to z_top; the wall
-    # faces the bore cavity, so its outward normal points toward the axis
-    cyl_rows = []
-    for i in range(count_lat + 1):
-        cyl_rows.append(
-            [cylinder_point(360.0 * j / count_lon, z_top * i / count_lat)
+    # cone wall: from the equator face (z = 0) up to the apex; the wall
+    # faces the bore, so its outward normal points toward the axis
+    cone_rows = []
+    for i in range(count_cone + 1):
+        cone_rows.append(
+            [cone_point(360.0 * j / count_lon, apex_z * i / count_cone)
              for j in range(count_lon)]
         )
-    for i in range(count_lat):
-        row_a = cyl_rows[i]
-        row_b = cyl_rows[i + 1]
+    for i in range(count_cone):
+        row_a = cone_rows[i]
+        row_b = cone_rows[i + 1]
+        if i == count_cone - 1:
+            apex = row_b[0]
+            for j in range(count_lon):
+                j2 = (j + 1) % count_lon
+                triangles.append((apex, row_a[j2], row_a[j]))
+            continue
         for j in range(count_lon):
             j2 = (j + 1) % count_lon
             a = row_b[j]
@@ -149,9 +161,9 @@ def shell_hemisphere(radius_mm, bore_radius_mm, north, sample_degrees):
             triangles.append((a, b, c))
             triangles.append((a, c, d))
 
-    # equator face: the annulus between the bore and the outer circle
+    # equator face: the annulus between the cone base and the outer circle
     equator = sphere_rows[0]
-    inner = cyl_rows[0]
+    inner = cone_rows[0]
     for j in range(count_lon):
         j2 = (j + 1) % count_lon
         a = inner[j]
@@ -221,7 +233,7 @@ def write_obj(path, groups):
                 for point in (a, b, c):
                     handle.write("v %.6f %.6f %.6f\n" % point)
                 handle.write("f %d %d %d\n" % (vertex_index, vertex_index + 1,
-                                               vertex_index + 2))
+                                                vertex_index + 2))
                 vertex_index += 3
 
 
@@ -229,15 +241,17 @@ def run(arguments):
     os.makedirs(arguments.output_dir, exist_ok=True)
     for hemisphere in (arguments.hemisphere,):
         north = hemisphere == "north"
-        if arguments.bore_mm and arguments.bore_mm > 0.0:
-            triangles, boundary = shell_hemisphere(
+        if arguments.bore_diameter_mm and arguments.bore_diameter_mm > 0.0:
+            triangles, boundary = cone_bore_hemisphere(
                 arguments.radius_mm,
-                arguments.bore_mm / 2.0,
+                arguments.bore_diameter_mm,
+                arguments.bore_angle_deg,
                 north,
                 arguments.sample_degrees,
             )
-            description = "hemispherical shell with %g mm through-bore (step 2)" % (
-                arguments.bore_mm
+            description = (
+                "hemispherical shell with a %g mm conical bore at %g deg"
+                % (arguments.bore_diameter_mm, arguments.bore_angle_deg)
             )
         else:
             triangles, boundary = solid_hemisphere(
@@ -335,11 +349,18 @@ def build_parser():
     )
     parser.add_argument("--radius-mm", type=float, default=100.0)
     parser.add_argument(
-        "--bore-mm",
+        "--bore-diameter-mm",
         type=float,
-        default=80.0,
-        help="diameter of the central vertical cylinder subtracted from "
-        "the solid (0 for a plain solid hemisphere)",
+        default=160.0,
+        help="diameter of the conical bore's base at the equator (0 for a "
+        "plain solid hemisphere)",
+    )
+    parser.add_argument(
+        "--bore-angle-deg",
+        type=float,
+        default=45.0,
+        help="the conical bore's wall tilt inward from the vertical, in "
+        "degrees",
     )
     parser.add_argument("--sample-degrees", type=float, default=2.0)
     parser.add_argument(
