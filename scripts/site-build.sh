@@ -76,7 +76,7 @@ page_title() {
         index)     echo "Model Render Print" ;;
         dashboard) echo "Dashboard" ;;
         frame)     echo "Assembly Frame" ;;
-        rib)       echo "Rib + First Row" ;;
+        support)   echo "Interior Support" ;;
         *)         echo "$name_base" ;;
     esac
 }
@@ -131,23 +131,10 @@ if [ -f "$FILE_FRAME_MODEL" ]; then
     echo "site-build: copied the assembly-frame model"
 fi
 
-# Copy the generated rib + first-row model (if present) so the rib page
-# can load it; it lives in dataflow.out/ (generated, not version-controlled).
-FILE_RIB_MODEL="$REPOSITORY_ROOT/dataflow.out/rib/rib-firstrow.obj"
-if [ -f "$FILE_RIB_MODEL" ]; then
-    cp "$FILE_RIB_MODEL" "$DIRECTORY_OUTPUT/rib-firstrow.obj"
-    echo "site-build: copied the rib + first-row model"
-fi
-
-# Copy the printable rib STLs (if present) for the rib page's download links.
-FILE_RIB_STL_NORTH="$REPOSITORY_ROOT/dataflow.out/rib/rib-north.stl"
-if [ -f "$FILE_RIB_STL_NORTH" ]; then
-    cp "$FILE_RIB_STL_NORTH" "$DIRECTORY_OUTPUT/rib-north.stl"
-    echo "site-build: copied the north rib STL"
-fi
-FILE_RIB_STL_SOUTH="$REPOSITORY_ROOT/dataflow.out/rib/rib-south.stl"
-if [ -f "$FILE_RIB_STL_SOUTH" ]; then
-    cp "$FILE_RIB_STL_SOUTH" "$DIRECTORY_OUTPUT/rib-south.stl"
-    echo "site-build: copied the south rib STL"
+# Copy the interior support model (if present) for the support page.
+FILE_SUPPORT_MODEL="$REPOSITORY_ROOT/dataflow.out/support/support-north.obj"
+if [ -f "$FILE_SUPPORT_MODEL" ]; then
+    cp "$FILE_SUPPORT_MODEL" "$DIRECTORY_OUTPUT/support-north.obj"
+    echo "site-build: copied the interior support model"
 fi
 exit 0

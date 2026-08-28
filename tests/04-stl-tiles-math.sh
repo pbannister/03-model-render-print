@@ -148,6 +148,7 @@ assert build.elevation_to_mm(8849.0, -10994.0, 8849.0,
 assert sea_level_mm > mapped_low, "the sea-level plateau sits above the base"
 
 # --- chamfered walls, alignment keys, underside mark ------------------------
+# --- chamfered walls, underside mark, watertightness -----------------------
 def count_nonmanifold(triangles):
     edge_counts = {}
     for (a, c, d) in triangles:
@@ -160,96 +161,29 @@ def count_nonmanifold(triangles):
             edge_counts[key] = edge_counts.get(key, 0) + 1
     return sum(1 for count in edge_counts.values() if count != 2)
 
-# key plan conventions
-plan = build.key_plan_for_tile(
-    next(t for t in tiles if t["id"] == "tile-N30E000"), 30.0)
-kinds = {entry["edge"]: entry["kind"] for entry in plan}
-assert kinds == {"north": "stud", "east": "stud",
-                 "south": "socket", "west": "socket"}, kinds
-plan = build.key_plan_for_tile(
-    next(t for t in tiles if t["id"] == "tile-S60E000"), 30.0)
-kinds = {entry["edge"]: entry["kind"] for entry in plan}
-assert kinds["south"] == "stud", "pole-side south edge carries a stud"
-assert [entry["edge"] for entry in
-        build.key_plan_for_tile(tiles[-1], 30.0)] == ["ring"]
-
-# pair-wise decisions: a tall tile mates a tall tile; a thin tile skips
-def synthetic_geometry(sample_degrees, width):
-    """Geometry (edges, lats, lons, fabricated widths) for all tiles."""
-    geometry = {}
-    for tile_plan in tiles:
-        lats_g, lons_g = build.grid_lines(tile_plan, sample_degrees)
-        elev_g = [[12.0 for _ in lons_g] for _ in lats_g]
-        center_lat = (tile_plan["lat_min"] + tile_plan["lat_max"]) / 2.0
-        center_lon = tile_plan["lon_min"] if tile_plan["is_cap"] else (
-            tile_plan["lon_min"] + tile_plan["lon_max"]) / 2.0
-        frame_g = build.local_frame(center_lat, center_lon)
-        top_g = build.top_grid(tile_plan, lats_g, lons_g, elev_g, 100.0,
-                               frame_g)
-        z_bottom_g = min(point[2] for row in top_g for point in row) - 12.0
-        boundary_g, edges_g, lats_b, lons_b = build.boundary_ring(
-            tile_plan, top_g, lats_g, lons_g)
-        geometry[tile_plan["id"]] = {
-            "widths": [width for _ in boundary_g],
-            "edges": edges_g,
-            "lats": lats_b,
-            "lons": lons_b,
-        }
-    return geometry
-
-def key_edges(decision):
-    return {key["edge"]: key["kind"] for key in decision}
-
-def build_key_mid(geometry, tile_id, edge):
-    start, count = geometry[tile_id]["edges"][edge]
-    return start + count // 2
-
-geometry_tall = synthetic_geometry(0.25, 12.0)
-decisions = build.key_decisions(tiles, geometry_tall, 30.0)
-assert key_edges(decisions["tile-N30E000"]) == {
-    "east": "stud", "north": "stud", "west": "socket", "south": "socket"}, \
-    decisions["tile-N30E000"]
-assert key_edges(decisions["tile-S60E000"])["south"] == "stud", decisions
-assert key_edges(decisions["tile-N90"]) == {"ring": "socket"}, decisions
-geometry_thin = synthetic_geometry(0.25, 12.0)
-mid_east_neighbor = build_key_mid(geometry_thin, "tile-N30E045", "west")
-geometry_thin["tile-N30E045"]["widths"][mid_east_neighbor] = 2.0
-decisions_thin = build.key_decisions(tiles, geometry_thin, 30.0)
-assert "east" not in key_edges(decisions_thin["tile-N30E000"]), \
-    "fin needs the neighbor's groove"
-assert key_edges(decisions_thin["tile-N90"]) == {"ring": "socket"}
-
-# synthetic tile: chamfer planes through the origin, keys, id, watertight
+# synthetic tile: chamfer planes through the origin, id, watertight
 synthetic = next(t for t in tiles if t["id"] == "tile-N30E000")
 lats_s, lons_s = build.grid_lines(synthetic, 0.25)
 elev_s = [[12.0 for _ in lons_s] for _ in lats_s]
 mesh, boundary_edges, features = build.build_mesh(
-    synthetic, lats_s, lons_s, elev_s, 100.0, 12.0,
-    decisions["tile-N30E000"])
+    synthetic, lats_s, lons_s, elev_s, 100.0, 12.0)
 assert features["id_mark"] == "N30E000", features["id_mark"]
 for (normal, point) in features["wall_planes"]:
     assert abs(build.dot(normal, point)) < 1e-6, \
         "every wall plane must contain the globe center"
-kinds = {key["edge"]: key["kind"] for key in features["keys"]}
-assert kinds == {"east": "stud", "north": "stud",
-                 "west": "socket", "south": "socket"}, kinds
 z_min = min(point[2] for triangle in mesh for point in triangle)
 assert abs(z_min) < 1e-9, z_min
 assert any(abs(point[2] - build.GROOVE_DEPTH_MM) < 1e-9
            for triangle in mesh for point in triangle), "groove floor"
 assert count_nonmanifold(mesh) == 0, "synthetic tile must be watertight"
 
-# polar cap: ring sockets, id, watertight
+# polar cap: id, watertight
 cap = next(t for t in tiles if t["id"] == "tile-N90")
 lats_c, lons_c = build.grid_lines(cap, 0.25)
 elev_c = [[12.0 for _ in lons_c] for _ in lats_c]
 mesh_c, _, features_c = build.build_mesh(cap, lats_c, lons_c, elev_c,
-                                         100.0, 12.0,
-                                         decisions["tile-N90"])
+                                         100.0, 12.0)
 assert features_c["id_mark"] == "N90", features_c["id_mark"]
-assert all(key["edge"] == "ring" and key["kind"] == "socket"
-           for key in features_c["keys"])
-assert len(features_c["keys"]) > 0, "the ring carries the band fins"
 assert count_nonmanifold(mesh_c) == 0, "cap tile must be watertight"
 
 print('04-stl-tiles-math: tiling math invariants ok')

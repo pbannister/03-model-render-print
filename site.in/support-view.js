@@ -1,20 +1,29 @@
-// rib-view.js — interactive viewer for the rib + first-row assembly plan.
-// Loads rib-firstrow.obj (grouped: two reinforcing ribs, the equator ring,
-// and the first-row tiles of each hemisphere), colors each piece by role,
-// and offers drag-to-rotate / scroll-to-zoom.  Tiles render semi-transparent
-// so the rib can be seen pressing against their inner faces.
+// support-view.js — interactive viewer for the interior support + hemisphere tiles.
+// Loads support-north.obj (grouped: the support shell + the hemisphere tiles), colors
+// each piece by latitude band, and offers drag-to-rotate / scroll-to-zoom.
 import * as THREE from './three.module.min.js';
 
-const canvas = document.getElementById('rib-canvas');
-const statusEl = document.getElementById('rib-status');
-const legendEl = document.getElementById('rib-legend');
+const canvas = document.getElementById('support-canvas');
+const statusEl = document.getElementById('support-status');
+const legendEl = document.getElementById('support-legend');
 
-const STYLE = {
-  'rib-north': { color: 0xff4d4d, opaque: true, label: 'north rib (just above the equator)' },
-  'rib-south': { color: 0x4da6ff, opaque: true, label: 'south rib (just below the equator)' },
-  equator:     { color: 0x8b95a5, opaque: true, label: 'equator reference ring' },
-  N00:         { color: 0xffca3a, opaque: false, label: 'first row north (N00, 0–30°N)' },
-  S30:         { color: 0x2ec4b6, opaque: false, label: 'first row south (S30, 30°S–0)' },
+const BAND_COLORS = {
+  SUPPORT: 0x9aa0a6,
+  S90: 0x8ecae6,
+  S60: 0x219ebc,
+  S30: 0x8338ec,
+  N00: 0xfb8500,
+  N30: 0xff006e,
+  N90: 0xffb703,
+};
+const BAND_LABELS = {
+  SUPPORT: 'support (shell)',
+  S90: 'south cap (S90)',
+  S60: 'band 60–30 S',
+  S30: 'band 30–0 S',
+  N00: 'band 0–30 N',
+  N30: 'band 30–60 N',
+  N90: 'north cap (N90)',
 };
 
 const scene = new THREE.Scene();
@@ -24,19 +33,19 @@ camera.up.set(0, 0, 1);  // Earth's rotation axis is +Z
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
-scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-const sun = new THREE.DirectionalLight(0xffffff, 0.95);
+scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+const sun = new THREE.DirectionalLight(0xffffff, 0.9);
 sun.position.set(250, 300, 400);
 scene.add(sun);
-const fill = new THREE.DirectionalLight(0x88aaff, 0.3);
+const fill = new THREE.DirectionalLight(0x88aaff, 0.25);
 fill.position.set(-300, -200, -250);
 scene.add(fill);
 
-// faint wireframe of the globe surface, so the assembly's extent is clear
+// faint wireframe of the globe surface, so the frame's extent is clear
 const globeOutline = new THREE.Mesh(
     new THREE.SphereGeometry(103, 48, 24),
     new THREE.MeshBasicMaterial({ wireframe: true, color: 0x3a6ea5,
-                                  transparent: true, opacity: 0.2 }));
+                                  transparent: true, opacity: 0.22 }));
 scene.add(globeOutline);
 
 const view = { radius: 430, theta: 0.6, phi: 1.25 };
@@ -48,13 +57,12 @@ function clamp(value, low, high) {
     return Math.min(high, Math.max(low, value));
 }
 
-function roleOf(group) {
-    if (group.startsWith('rib-north')) return 'rib-north';
-    if (group.startsWith('rib-south')) return 'rib-south';
-    if (group.startsWith('equator')) return 'equator';
-    if (group.startsWith('tile-N00')) return 'N00';
-    if (group.startsWith('tile-S30')) return 'S30';
-    return 'equator';
+function bandOf(group) {
+    if (group === 'SUPPORT') {
+        return 'SUPPORT';
+    }
+    const match = group.match(/^(S90|S60|S30|N00|N30|N90)/);
+    return match ? match[1] : 'SUPPORT';
 }
 
 function parseObj(text) {
@@ -94,41 +102,40 @@ function parseObj(text) {
 }
 
 async function loadModel() {
-    const response = await fetch('./rib-firstrow.obj');
+    const response = await fetch('./support-north.obj');
     if (!response.ok) {
-        throw new Error('rib model not found (HTTP ' + response.status + ')');
+        throw new Error('frame model not found (HTTP ' + response.status + ')');
     }
     const geometries = parseObj(await response.text());
     let triangleCount = 0;
     for (const [name, geometry] of Object.entries(geometries)) {
-        const style = STYLE[roleOf(name)];
+        const color = BAND_COLORS[bandOf(name)];
+        const isSupport = bandOf(name) === 'SUPPORT';
         const material = new THREE.MeshStandardMaterial({
-            color: style.color,
+            color,
             flatShading: true,
             metalness: 0.1,
             roughness: 0.55,
-            transparent: !style.opaque,
-            opacity: style.opaque ? 1.0 : 0.55,
-            depthWrite: style.opaque,
+            transparent: isSupport,
+            opacity: isSupport ? 0.55 : 1.0,
         });
         scene.add(new THREE.Mesh(geometry, material));
         triangleCount += geometry.index.count / 3;
     }
-    statusEl.textContent = 'rib + first row loaded: ' + triangleCount
-        + ' triangles, ' + Object.keys(geometries).length + ' pieces';
+    statusEl.textContent = 'support loaded: ' + triangleCount + ' triangles, '
+        + Object.keys(geometries).length + ' pieces';
 }
 
 function buildLegend() {
-    for (const [role, style] of Object.entries(STYLE)) {
+    for (const [band, label] of Object.entries(BAND_LABELS)) {
         const swatch = document.createElement('span');
-        swatch.className = 'rib-swatch';
-        swatch.style.background = '#' + style.color.toString(16)
+        swatch.className = 'support-swatch';
+        swatch.style.background = '#' + BAND_COLORS[band].toString(16)
             .padStart(6, '0');
-        swatch.style.opacity = style.opaque ? '1' : '0.55';
         const entry = document.createElement('span');
-        entry.className = 'rib-legend-entry';
+        entry.className = 'support-legend-entry';
         entry.appendChild(swatch);
-        entry.appendChild(document.createTextNode(style.label));
+        entry.appendChild(document.createTextNode(label));
         legendEl.appendChild(entry);
     }
 }

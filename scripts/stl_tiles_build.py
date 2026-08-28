@@ -213,63 +213,6 @@ def to_local(point, frame):
     return (dot(point, east), dot(point, north), dot(point, up))
 
 
-def rib_key_strip_local(tile, z_bottom, world_z_min, world_z_max, width_mm):
-    """The tile-to-ring key strip on the tile's bottom face, in tile-local
-    coordinates with the bottom plane at up = 0.
-
-    The strip is a rectangle spanning `width_mm` east-west (centred on the
-    tile's centre longitude) and the rib facet's full height north-south.
-    Returns (north_west, north_east, south_west, south_east).
-    """
-    center_lat, center_lon = tile_center(tile)
-    frame = local_frame(center_lat, center_lon)
-    up = unit_radial(center_lat, center_lon)
-
-    def corner(lon_degrees, world_z):
-        lam = math.radians(lon_degrees)
-        c = math.cos(lam)
-        s = math.sin(lam)
-        denom = up[0] * c + up[1] * s
-        if abs(denom) < 1e-12:
-            raise ValueError("degenerate rib facet")
-        radius = (z_bottom - up[2] * world_z) / denom
-        world = (radius * c, radius * s, world_z)
-        local = to_local(world, frame)
-        return (local[0], local[1], 0.0)
-
-    south_west = corner(tile["lon_min"], world_z_min)
-    south_east = corner(tile["lon_max"], world_z_min)
-    north_east = corner(tile["lon_max"], world_z_max)
-    north_west = corner(tile["lon_min"], world_z_max)
-
-    width_facet = math.sqrt(
-        (north_east[0] - north_west[0]) ** 2
-        + (north_east[1] - north_west[1]) ** 2
-    )
-    half = 0.5 * width_mm / width_facet
-    u_min = 0.5 - half
-    u_max = 0.5 + half
-
-    def lerp(point_a, point_b, t):
-        return (
-            point_a[0] + (point_b[0] - point_a[0]) * t,
-            point_a[1] + (point_b[1] - point_a[1]) * t,
-            0.0,
-        )
-
-    return (
-        lerp(north_west, north_east, u_min),
-        lerp(north_west, north_east, u_max),
-        lerp(south_west, south_east, u_min),
-        lerp(south_west, south_east, u_max),
-    )
-
-
-# ---------------------------------------------------------------------------
-# Grid sampling plan (pure Python).
-# ---------------------------------------------------------------------------
-
-
 def grid_lines(tile, sample_degrees):
     """(latitudes, longitudes) grid lines for a tile.
 
@@ -365,458 +308,12 @@ def wall_plane_normal(p_a, p_b, interior_point):
     return normal
 
 
-def bilinear_point(p_a, p_b, q_a, q_b, u, v):
-    """Point on the bilinear quad (p_a, p_b, q_b, q_a) at (u, v).
-
-    u runs 0..1 along the top edge; v runs 0..1 from the top edge toward
-    the bottom edge.
-    """
-    top_u = (
-        (1.0 - u) * p_a[0] + u * p_b[0],
-        (1.0 - u) * p_a[1] + u * p_b[1],
-        (1.0 - u) * p_a[2] + u * p_b[2],
-    )
-    bottom_u = (
-        (1.0 - u) * q_a[0] + u * q_b[0],
-        (1.0 - u) * q_a[1] + u * q_b[1],
-        (1.0 - u) * q_a[2] + u * q_b[2],
-    )
-    return (
-        (1.0 - v) * top_u[0] + v * bottom_u[0],
-        (1.0 - v) * top_u[1] + v * bottom_u[1],
-        (1.0 - v) * top_u[2] + v * bottom_u[2],
-    )
-
-
 def quad_triangles(point_a, point_b, point_c, point_d):
     """Two triangles for a quad with vertices in order a, b, c, d."""
     return [(point_a, point_b, point_c), (point_a, point_c, point_d)]
 
 
-KEY_MIN_WIDTH_MM = 3.2  # minimum wall height that hosts a key
-KEY_STUD_WIDTH_MM = 3.0  # fin width along the edge
-KEY_STUD_HEIGHT_MM = 2.0  # fin protrusion from the wall plane
-KEY_SOCKET_WIDTH_MM = 4.0  # groove width along the edge (fin + 0.5/side)
-KEY_SOCKET_DEPTH_MM = 3.0  # groove depth (fin plus 1.0 mm engagement slack)
-# Lens profile.  The key's depth is 0 in the top/bottom KEY_LENS_*_MM bands
-# of its reference height (KEY_MIN_WIDTH_MM), rising to full depth in
-# between; the constants scale with the reference so the profile (and thus
-# every fin/groove) stays identical on any wall.
-KEY_LENS_TOP_MM = 0.6  # key depth is 0 in the top 0.6 mm of the reference
-KEY_LENS_RISE_MM = 0.6  # depth rises to its maximum over 0.6 mm
-KEY_LENS_BOTTOM_MM = 0.6  # key depth is 0 in the bottom 0.6 mm
-KEY_LENS_FALL_MM = 0.6  # depth falls to 0 over 0.6 mm
 GROOVE_DEPTH_MM = 0.6  # underside mark groove depth
-
-# Tile-to-ring key (rib fin / tile-back socket) trapezoid profile, in
-# fractions of the facet height (v = 0 at the equator edge, 1 at the top).
-RIB_KEY_V_BASE_LO = 0.15   # fin/socket base starts here
-RIB_KEY_V_TOP_LO = 0.35    # reaches full depth here
-RIB_KEY_V_TOP_HI = 0.65    # leaves full depth here
-RIB_KEY_V_BASE_HI = 0.85   # base ends here
-
-
-def trapezoid_key_triangles(p_a, p_b, q_a, q_b, direction, depth,
-                            side_low, side_high):
-    """Trapezoidal key (fin or socket) protruding `direction` by `depth`.
-
-    p_a/p_b are the strip's top edge, q_a/q_b its bottom edge.  The key
-    occupies the middle of the strip height with 45-degree chamfered ends
-    (no horizontal faces), so it prints without supports.  Outward winding.
-    """
-    b0 = RIB_KEY_V_BASE_LO
-    t0 = RIB_KEY_V_TOP_LO
-    t1 = RIB_KEY_V_TOP_HI
-    b1 = RIB_KEY_V_BASE_HI
-
-    def bilinear(u, v):
-        top = (
-            (1.0 - u) * p_a[0] + u * p_b[0],
-            (1.0 - u) * p_a[1] + u * p_b[1],
-            (1.0 - u) * p_a[2] + u * p_b[2],
-        )
-        bottom = (
-            (1.0 - u) * q_a[0] + u * q_b[0],
-            (1.0 - u) * q_a[1] + u * q_b[1],
-            (1.0 - u) * q_a[2] + u * q_b[2],
-        )
-        return (
-            (1.0 - v) * top[0] + v * bottom[0],
-            (1.0 - v) * top[1] + v * bottom[1],
-            (1.0 - v) * top[2] + v * bottom[2],
-        )
-
-    def shift(point):
-        return (point[0] + depth * direction[0],
-                point[1] + depth * direction[1],
-                point[2] + depth * direction[2])
-
-    triangles = []
-    # strip above/below the key stays flat
-    triangles.extend(quad_triangles(
-        p_b, p_a, bilinear(0.0, b0), bilinear(1.0, b0)))
-    triangles.extend(quad_triangles(
-        bilinear(0.0, b1), q_a, q_b, bilinear(1.0, b1)))
-    # key face and chamfers
-    triangles.extend(quad_triangles(
-        shift(bilinear(0.0, t0)), shift(bilinear(0.0, t1)),
-        shift(bilinear(1.0, t1)), shift(bilinear(1.0, t0))))
-    triangles.extend(quad_triangles(
-        bilinear(0.0, b0), shift(bilinear(0.0, t0)),
-        shift(bilinear(1.0, t0)), bilinear(1.0, b0)))
-    triangles.extend(quad_triangles(
-        shift(bilinear(0.0, t1)), bilinear(0.0, b1),
-        bilinear(1.0, b1), shift(bilinear(1.0, t1))))
-    # side faces
-    if side_low:
-        triangles.extend(quad_triangles(
-            bilinear(0.0, b0), bilinear(0.0, b1),
-            shift(bilinear(0.0, t1)), shift(bilinear(0.0, t0))))
-    if side_high:
-        triangles.extend(quad_triangles(
-            bilinear(1.0, b1), bilinear(1.0, b0),
-            shift(bilinear(1.0, t0)), shift(bilinear(1.0, t1))))
-    return triangles
-
-
-def _lerp3(point_a, point_b, t):
-    return (point_a[0] + (point_b[0] - point_a[0]) * t,
-            point_a[1] + (point_b[1] - point_a[1]) * t,
-            point_a[2] + (point_b[2] - point_a[2]) * t)
-
-
-def _segment_line_intersect(p, q, a, b):
-    """Intersection of segment p-q with the line through a-b (z interpolated)."""
-    ex = b[0] - a[0]
-    ey = b[1] - a[1]
-    dx = q[0] - p[0]
-    dy = q[1] - p[1]
-    denom = ex * dy - ey * dx
-    if abs(denom) < 1e-12:
-        return q
-    t = (ey * (p[0] - a[0]) - ex * (p[1] - a[1])) / denom
-    t = max(0.0, min(1.0, t))
-    return (p[0] + t * dx, p[1] + t * dy, p[2] + t * (q[2] - p[2]))
-
-
-def _cross2(o, a, b):
-    """2D cross product (a-o) x (b-o)."""
-    return ((a[0] - o[0]) * (b[1] - o[1])
-            - (a[1] - o[1]) * (b[0] - o[0]))
-
-
-def _signed_area2(poly):
-    return 0.5 * sum(
-        poly[i][0] * poly[(i + 1) % len(poly)][1]
-        - poly[(i + 1) % len(poly)][0] * poly[i][1]
-        for i in range(len(poly))
-    )
-
-
-def _point_in_tri(p, a, b, c):
-    d1 = _cross2(a, b, p)
-    d2 = _cross2(b, c, p)
-    d3 = _cross2(c, a, p)
-    has_neg = min(d1, d2, d3) < -1e-9
-    has_pos = max(d1, d2, d3) > 1e-9
-    return not (has_neg and has_pos)
-
-
-def _ear_clip(poly):
-    """Ear-clip a simple polygon into triangles (same winding as input)."""
-    pts = [tuple(p) for p in poly]
-    flipped = _signed_area2(pts) < 0.0
-    if flipped:
-        pts.reverse()
-    triangles = []
-    index = list(range(len(pts)))
-    guard = 0
-    while len(index) > 3 and guard < len(pts) * len(pts):
-        guard += 1
-        found = False
-        count = len(index)
-        for j in range(count):
-            i0 = index[j - 1]
-            i1 = index[j]
-            i2 = index[(j + 1) % count]
-            a = pts[i0]
-            b = pts[i1]
-            c = pts[i2]
-            if _cross2(a, b, c) <= 1e-9:
-                continue
-            blocked = False
-            for k in range(count):
-                ik = index[k]
-                if ik == i0 or ik == i1 or ik == i2:
-                    continue
-                if _point_in_tri(pts[ik], a, b, c):
-                    blocked = True
-                    break
-            if blocked:
-                continue
-            triangles.append((a, b, c))
-            index.pop(j)
-            found = True
-            break
-        if not found:
-            break
-    if len(index) == 3:
-        triangles.append((pts[index[0]], pts[index[1]], pts[index[2]]))
-    if flipped:
-        triangles = [(a, c, b) for (a, b, c) in triangles]
-    return triangles
-
-
-def _clip_polygon_inside(poly, rect):
-    """Sutherland-Hodgman clip of a polygon against a CCW convex rect."""
-    output = [tuple(p) for p in poly]
-    for i in range(4):
-        a = rect[i]
-        b = rect[(i + 1) % 4]
-        if len(output) < 3:
-            return []
-        next_output = []
-        count = len(output)
-        for j in range(count):
-            p = output[j]
-            q = output[(j + 1) % count]
-            p_in = _cross2(a, b, p) >= -1e-9
-            q_in = _cross2(a, b, q) >= -1e-9
-            if p_in and q_in:
-                next_output.append(q)
-            elif p_in and not q_in:
-                next_output.append(_segment_line_intersect(p, q, a, b))
-            elif not p_in and q_in:
-                next_output.append(_segment_line_intersect(p, q, a, b))
-                next_output.append(q)
-        output = next_output
-    return output
-
-
-def _clean_polygon(poly):
-    """Drop consecutive duplicate and collinear vertices (2D, z ignored)."""
-    points = [(point[0], point[1], 0.0) for point in poly]
-    cleaned = []
-    for point in points:
-        if cleaned and abs(point[0] - cleaned[-1][0]) < 1e-9 and abs(
-            point[1] - cleaned[-1][1]
-        ) < 1e-9:
-            continue
-        while len(cleaned) >= 2 and abs(
-            _cross2(cleaned[-2], cleaned[-1], point)
-        ) < 1e-9:
-            cleaned.pop()
-        cleaned.append(point)
-    while len(cleaned) >= 3 and abs(
-        _cross2(cleaned[-1], cleaned[0], cleaned[1])
-    ) < 1e-9:
-        cleaned.pop(0)
-    while len(cleaned) >= 3 and abs(
-        _cross2(cleaned[-2], cleaned[-1], cleaned[0])
-    ) < 1e-9:
-        cleaned.pop()
-    return cleaned
-
-
-def _stitch_loops(segments):
-    """Chain directed 2D segments (x, y, z) into closed vertex loops."""
-    def point_key(point):
-        return (round(point[0], 6), round(point[1], 6))
-
-    remaining = list(segments)
-    loops = []
-    while remaining:
-        first = remaining.pop(0)
-        loop = [first[0], first[1]]
-        current = first[1]
-        guard = 0
-        while guard <= len(segments):
-            guard += 1
-            key = point_key(current)
-            found = None
-            for index, (start, end) in enumerate(remaining):
-                if point_key(start) == key:
-                    found = index
-                    break
-            if found is None:
-                raise ValueError("socket boundary segments do not form closed loops")
-            start, end = remaining.pop(found)
-            loop.append(end)
-            current = end
-            if point_key(current) == point_key(loop[0]):
-                loop.pop()
-                break
-        loops.append(loop)
-    return loops
-
-
-def _triangulate_minus(outer, hole):
-    """Triangle (o, a, b) minus a convex hole; preserves outer edges.
-
-    The region is re-triangulated from the apex o around the hole.  The
-    triangle's edges are preserved (they are shared with the walls and the
-    neighbouring fan triangles), and the hole's boundary edges are kept so
-    the socket walls can be built from them.  Returns
-    (triangles, hole_segments): triangles tile the region at z = 0 with the
-    triangle's own winding; hole_segments are the hole's boundary segments
-    (reversed from the hole polygon) that lie on the opening rectangle.
-    """
-    o, a, b = (tuple(point) for point in outer)
-    o = (o[0], o[1], 0.0)
-    a = (a[0], a[1], 0.0)
-    b = (b[0], b[1], 0.0)
-    hole = _clean_polygon(hole)
-    if len(hole) < 3:
-        return [outer], []
-    triangle_area = abs(_signed_area2((o, a, b)))
-    if triangle_area - abs(_signed_area2(hole)) < 1e-6 * max(1.0, triangle_area):
-        # the hole covers the whole triangle: nothing remains
-        return [], []
-    outer_edges = ((o, a), (a, b), (b, o))
-    tolerance = 1e-6
-
-    def on_segment(point, start, end):
-        dx = end[0] - start[0]
-        dy = end[1] - start[1]
-        length = math.hypot(dx, dy)
-        if length < 1e-12:
-            return (
-                abs(point[0] - start[0]) < tolerance
-                and abs(point[1] - start[1]) < tolerance
-            )
-        if abs(_cross2(start, end, point)) / length > tolerance:
-            return False
-        t = ((point[0] - start[0]) * dx + (point[1] - start[1]) * dy) / (
-            length * length
-        )
-        return -tolerance <= t <= 1.0 + tolerance
-
-    def edge_key(p, q):
-        return (round(p[0], 6), round(p[1], 6), round(q[0], 6), round(q[1], 6))
-
-    # hole edges lying on a triangle edge (the shared arcs)
-    shared = set()
-    count_hole = len(hole)
-    for i in range(count_hole):
-        p = hole[i]
-        q = hole[(i + 1) % count_hole]
-        for start, end in outer_edges:
-            if on_segment(p, start, end) and on_segment(q, start, end):
-                shared.add(edge_key(p, q))
-                break
-
-    def emit(segments_out, start, end):
-        if abs(start[0] - end[0]) < 1e-9 and abs(start[1] - end[1]) < 1e-9:
-            return
-        segments_out.append((start, end))
-
-    # outer edges, split at the shared-arc endpoints
-    region_segments = []
-    for start, end in outer_edges:
-        split_points = []
-        for i in range(count_hole):
-            p = hole[i]
-            q = hole[(i + 1) % count_hole]
-            if edge_key(p, q) in shared or edge_key(q, p) in shared:
-                for point in (p, q):
-                    if on_segment(point, start, end) and not any(
-                        abs(point[0] - r[0]) < 1e-9 and abs(point[1] - r[1]) < 1e-9
-                        for r in split_points
-                    ):
-                        split_points.append(point)
-        split_points.sort(
-            key=lambda point: (point[0] - start[0]) ** 2 + (point[1] - start[1]) ** 2
-        )
-        walk = [start] + split_points + [end]
-        for i in range(len(walk) - 1):
-            p = walk[i]
-            q = walk[i + 1]
-            if edge_key(p, q) in shared or edge_key(q, p) in shared:
-                continue
-            emit(region_segments, p, q)
-
-    # hole edges, reversed, shared arcs skipped
-    hole_segments = []
-    for i in range(count_hole):
-        p = hole[i]
-        q = hole[(i + 1) % count_hole]
-        if edge_key(p, q) in shared or edge_key(q, p) in shared:
-            continue
-        emit(hole_segments, q, p)
-        emit(region_segments, q, p)
-
-    triangles = []
-    for loop in _stitch_loops(region_segments):
-        region = _clean_polygon(loop)
-        if len(region) >= 3:
-            triangles.extend(_ear_clip(region))
-    return triangles, hole_segments
-
-
-def socket_recess_triangles(strip, depth):
-    """The tile-to-ring socket opening for a first-row tile.
-
-    strip is the full key strip (nw, ne, sw, se) at z = 0; the recess spans
-    the fin's base band (v = RIB_KEY_V_BASE_LO..RIB_KEY_V_BASE_HI), fully
-    inside the bottom face.  Returns the opening's 4 corners
-    (top_west, top_east, bottom_east, bottom_west) in CCW order at z = 0.
-    """
-    nw, ne, sw, se = strip
-    b0 = RIB_KEY_V_BASE_LO
-    b1 = RIB_KEY_V_BASE_HI
-    tw = _lerp3(nw, sw, b0)
-    te = _lerp3(ne, se, b0)
-    bw = _lerp3(nw, sw, b1)
-    be = _lerp3(ne, se, b1)
-    return (tw, bw, be, te)
-
-
-def socket_walls_and_floor(loop, depth):
-    """Socket walls + floor from the opening's boundary loop.
-
-    The loop is the opening's perimeter at z = 0, subdivided to match the
-    clipped bottom-face fan; the walls rise to z = depth and the floor fills
-    the opening at z = depth.
-    """
-    walls = []
-    count = len(loop)
-    for i in range(count):
-        a = loop[i]
-        b = loop[(i + 1) % count]
-        walls.extend(quad_triangles(
-            a, b, (b[0], b[1], depth), (a[0], a[1], depth)))
-    center_x = sum(p[0] for p in loop) / count
-    center_y = sum(p[1] for p in loop) / count
-    center = (center_x, center_y, depth)
-    floor = []
-    for i in range(count):
-        a = loop[i]
-        b = loop[(i + 1) % count]
-        floor.append((center, (a[0], a[1], depth), (b[0], b[1], depth)))
-    return walls, floor
-
-
-def key_plan_for_tile(tile, band_degrees):
-    """Candidate key edges: which walls would carry studs and sockets.
-
-    North and east walls carry studs; south and west carry sockets, except
-    the pole-side south edge of the band adjacent to the south cap, which
-    carries a stud (it mates the cap's socketed ring).  Cap tiles carry
-    sockets on the ring.  Final placement is decided pair-wise by
-    key_decisions().
-    """
-    if tile["is_cap"]:
-        return [{"edge": "ring", "kind": "socket"}]
-    plan = [
-        {"edge": "north", "kind": "stud"},
-        {"edge": "east", "kind": "stud"},
-        {"edge": "west", "kind": "socket"},
-    ]
-    if tile["lat_min"] == -90.0 + band_degrees:
-        plan.append({"edge": "south", "kind": "stud"})
-    else:
-        plan.append({"edge": "south", "kind": "socket"})
-    return plan
 
 
 def boundary_ring(tile, top, latitudes, longitudes):
@@ -885,466 +382,20 @@ def top_grid(tile, latitudes, longitudes, elevation_mm, radius_mm, frame):
     return top
 
 
-def sample_widths(boundary, z_bottom):
-    """Wall height (|p - q|) at every boundary sample."""
-    return [
-        vec_len(vec_sub(point, radial_projection(point, z_bottom)))
-        for point in boundary
-    ]
+def wall_triangles(boundary, z_bottom):
+    """Wall quads chamfered through the globe center.
 
-
-def key_decisions(tiles, geometry, band_degrees):
-    """Pair-wise vertical key placement.
-
-    A stud (fin) is placed on an edge only where its mating socket
-    (groove) exists, so every fin meets a groove in the assembled globe:
-    the east fin mates the east neighbor's west groove, the north fin
-    mates the above tile's south groove (or the north cap's ring), and the
-    pole-side south fin mates the south cap's ring.  The equator join
-    (N00 south <-> S30 north) carries no key: the rib seats the first rows
-    and the tile-to-ring socket stays centred on the underside instead.
-    Both wall heights at the key position must be tall enough.  Sockets
-    are derived from the neighbors' fins so stud and socket always share
-    one position.
-
-    geometry maps tile ids to {"widths": per-sample wall heights,
-    "edges": edge spans, "lats"/"lons": sample positions}.  Returns
-    {tile_id: [{"edge": name, "kind": kind, "index": boundary index}]}.
+    Each wall quad's plane contains the globe center, so every shared edge
+    pair lies in one common plane in the assembled globe (no wedge gaps).
+    Returns (triangles, planes): the wall triangles and the per-quad wall
+    plane normals.
     """
-    decisions = {tile["id"]: [] for tile in tiles}
-
-    def geom(tile):
-        return geometry[tile["id"]]
-
-    def width_at(tile, edge_name, index):
-        start, count = geom(tile)["edges"][edge_name]
-        if not (start <= index < start + count):
-            return None
-        return geom(tile)["widths"][index]
-
-    def mid_index(tile, edge_name):
-        start, count = geom(tile)["edges"][edge_name]
-        return start + count // 2
-
-    def sample_near(tile, edge_name, lat, lon):
-        start, count = geom(tile)["edges"][edge_name]
-        best = None
-        best_d = None
-        for j in range(start, start + count):
-            d_lat = geom(tile)["lats"][j] - lat
-            d_lon = geom(tile)["lons"][j] - lon
-            d = d_lat * d_lat + d_lon * d_lon
-            if best_d is None or d < best_d:
-                best_d = d
-                best = j
-        return best
-
-    def mate_width(tile, edge_name, index):
-        if edge_name == "east":
-            lon_end = tile["lon_max"]
-            if lon_end >= 360.0:
-                lon_end = 0.0
-            for other in tiles:
-                if other["is_cap"] or other["lat_min"] != tile["lat_min"]:
-                    continue
-                if other["lon_min"] == lon_end:
-                    return width_at(other, "west", mid_index(other, "west"))
-            return None
-        if edge_name == "north":
-            mid_lon = (tile["lon_min"] + tile["lon_max"]) / 2.0
-            if tile["lat_max"] == 90.0 - band_degrees:
-                cap = next(t for t in tiles if t["id"] == "tile-N90")
-                return width_at(cap, "ring", sample_near(cap, "ring", 90.0, mid_lon))
-            for other in tiles:
-                if other["is_cap"] or other["lat_min"] != tile["lat_max"]:
-                    continue
-                if other["lon_min"] <= mid_lon < other["lon_max"]:
-                    return width_at(
-                        other,
-                        "south",
-                        sample_near(other, "south", tile["lat_max"], mid_lon),
-                    )
-            return None
-        # the pole-side south fin mates the south cap's ring
-        cap = next(t for t in tiles if t["id"] == "tile-S90")
-        mid_lon = (tile["lon_min"] + tile["lon_max"]) / 2.0
-        return width_at(cap, "ring", sample_near(cap, "ring", -90.0, mid_lon))
-
-    def fins_placed(tile_id):
-        return [key for key in decisions[tile_id] if key["kind"] == "stud"]
-
-    # pass A: the fins, from the mating socket's wall height
-    for tile in tiles:
-        if tile["is_cap"]:
-            continue
-        for edge in ("east", "north"):
-            if edge == "north" and tile["lat_max"] == 0.0:
-                # the equator join (N00 south <-> S30 north) is dropped:
-                # the rib seats the first rows, so the wall key would only
-                # fight the centred tile-to-ring socket
-                continue
-            if edge == "north":
-                # The band above may hold a different number of tiles
-                # (equal-area bands: 12 tiles at 0-30 deg against 8 at
-                # 30-60 deg), so the joins misalign.  Place one fin per
-                # overlapping tile above, at the overlap's centre, so every
-                # shared boundary segment gets its key.
-                for other in tiles:
-                    if other["lat_min"] != tile["lat_max"]:
-                        continue
-                    if other["is_cap"]:
-                        if not (
-                            other["lon_min"] <= tile["lon_min"]
-                            and tile["lon_max"] <= other["lon_max"]
-                        ):
-                            continue
-                        mid_lon = (tile["lon_min"] + tile["lon_max"]) / 2.0
-                        index = mid_index(tile, "north")
-                        mate_edge = "ring"
-                        mate_index = sample_near(
-                            other, "ring", tile["lat_max"], mid_lon
-                        )
-                    else:
-                        if not (
-                            other["lon_max"] > tile["lon_min"]
-                            and other["lon_min"] < tile["lon_max"]
-                        ):
-                            continue
-                        mid_lon = (
-                            max(tile["lon_min"], other["lon_min"])
-                            + min(tile["lon_max"], other["lon_max"])
-                        ) / 2.0
-                        index = sample_near(tile, "north", tile["lat_max"], mid_lon)
-                        mate_edge = "south"
-                        mate_index = sample_near(
-                            other, "south", tile["lat_max"], mid_lon
-                        )
-                    own = width_at(tile, "north", index)
-                    mate = width_at(other, mate_edge, mate_index)
-                    if (
-                        own is not None
-                        and own >= KEY_MIN_WIDTH_MM
-                        and mate is not None
-                        and mate >= KEY_MIN_WIDTH_MM
-                    ):
-                        decisions[tile["id"]].append(
-                            {"edge": "north", "kind": "stud", "index": index}
-                        )
-                continue
-            index = mid_index(tile, edge)
-            own = width_at(tile, edge, index)
-            mate = mate_width(tile, edge, index)
-            if (
-                own is not None
-                and own >= KEY_MIN_WIDTH_MM
-                and mate is not None
-                and mate >= KEY_MIN_WIDTH_MM
-            ):
-                decisions[tile["id"]].append(
-                    {"edge": edge, "kind": "stud", "index": index}
-                )
-        if tile["lat_min"] == -90.0 + band_degrees:
-            index = mid_index(tile, "south")
-            own = width_at(tile, "south", index)
-            mate = mate_width(tile, "south", index)
-            if (
-                own is not None
-                and own >= KEY_MIN_WIDTH_MM
-                and mate is not None
-                and mate >= KEY_MIN_WIDTH_MM
-            ):
-                decisions[tile["id"]].append(
-                    {"edge": "south", "kind": "stud", "index": index}
-                )
-
-    # pass B: the grooves, derived from the neighbors' fins
-    for tile in tiles:
-        if tile["is_cap"]:
-            adjacent_lat = (
-                90.0 - band_degrees if tile["lat_max"] == 90.0 else -90.0 + band_degrees
-            )
-            for other in tiles:
-                if other["is_cap"]:
-                    continue
-                adjacent = (
-                    other["lat_max"] == adjacent_lat
-                    if tile["lat_max"] == 90.0
-                    else other["lat_min"] == adjacent_lat
-                )
-                if not adjacent:
-                    continue
-                pole_edge = "north" if tile["lat_max"] == 90.0 else "south"
-                for fin in fins_placed(other["id"]):
-                    if fin["edge"] != pole_edge:
-                        continue
-                    fin_lon = geom(other)["lons"][fin["index"]]
-                    ring_index = sample_near(
-                        tile,
-                        "ring",
-                        other["lat_max"] if pole_edge == "north" else other["lat_min"],
-                        fin_lon,
-                    )
-                    decisions[tile["id"]].append(
-                        {"edge": "ring", "kind": "socket", "index": ring_index}
-                    )
-            continue
-        lon_min = tile["lon_min"]
-        for other in tiles:
-            if other["is_cap"]:
-                continue
-            if (
-                other["lat_min"] == tile["lat_min"]
-                and other["lon_max"] % 360.0 == lon_min % 360.0
-            ):
-                fin = next(
-                    (k for k in fins_placed(other["id"]) if k["edge"] == "east"), None
-                )
-                if fin is not None:
-                    decisions[tile["id"]].append(
-                        {
-                            "edge": "west",
-                            "kind": "socket",
-                            "index": mid_index(tile, "west"),
-                        }
-                    )
-        for other in tiles:
-            if other["is_cap"] or other["lat_max"] != tile["lat_min"]:
-                continue
-            if tile["lat_min"] == 0.0:
-                # no equator socket: the ring seats these tiles instead
-                continue
-            if not (
-                other["lon_max"] > tile["lon_min"]
-                and other["lon_min"] < tile["lon_max"]
-            ):
-                continue
-            for fin in fins_placed(other["id"]):
-                if fin["edge"] != "north":
-                    continue
-                fin_lon = geom(other)["lons"][fin["index"]]
-                if not (tile["lon_min"] <= fin_lon < tile["lon_max"]):
-                    # the fin's along-edge position falls outside this
-                    # tile's span: no socket, so no orphan groove
-                    continue
-                south_index = sample_near(tile, "south", tile["lat_min"], fin_lon)
-                decisions[tile["id"]].append(
-                    {"edge": "south", "kind": "socket", "index": south_index}
-                )
-    return decisions
-
-
-def key_geometry(p_a, p_b, q_a, q_b, kind, interior_point):
-    """(offset_mm, direction) for a fin (stud) or groove (socket)."""
-    normal = wall_plane_normal(p_a, p_b, interior_point)
-    if kind == "stud":
-        return KEY_STUD_HEIGHT_MM, normal
-    return KEY_SOCKET_DEPTH_MM, (-normal[0], -normal[1], -normal[2])
-
-
-def key_depth(v_fraction, max_depth):
-    """Lens depth at a v-fraction (0..1) of the key's reference height.
-
-    The lens is defined over the constant KEY_MIN_WIDTH_MM, so the depth
-    profile and its split points are identical for every fin and groove
-    and for every quad of a key: shared edges stay continuous, and a fin
-    always sits inside its groove with the depth slack between the two
-    max depths.
-    """
-    millimetres = v_fraction * KEY_MIN_WIDTH_MM
-    rise = max(0.0, min(1.0, (millimetres - KEY_LENS_TOP_MM) / KEY_LENS_RISE_MM))
-    fall = max(
-        0.0,
-        min(
-            1.0,
-            (KEY_MIN_WIDTH_MM - KEY_LENS_BOTTOM_MM - millimetres) / KEY_LENS_FALL_MM,
-        ),
-    )
-    return max_depth * rise * fall
-
-
-def key_v_lines():
-    """Sorted v-fractions (0..1) where the key lens changes shape."""
-    points = [
-        KEY_LENS_TOP_MM,
-        KEY_LENS_TOP_MM + KEY_LENS_RISE_MM,
-        KEY_MIN_WIDTH_MM - KEY_LENS_BOTTOM_MM - KEY_LENS_FALL_MM,
-        KEY_MIN_WIDTH_MM - KEY_LENS_BOTTOM_MM,
-        KEY_MIN_WIDTH_MM / 2.0,
-    ]
-    return sorted({max(0.0, min(1.0, point / KEY_MIN_WIDTH_MM)) for point in points})
-
-
-def key_quad_triangles(
-    p_a, p_b, q_a, q_b, kind, offset_mm, direction, side_low, side_high
-):
-    """Vertical lens-shaped fin/groove surfaces for one keyed quad.
-
-    The wall's middle band (where the lens depth is nonzero) is replaced by
-    the fin (protruding) or groove (recessed); the top and bottom bands
-    stay.  The lens tapers the depth to zero at both ends, so there are no
-    horizontal key faces.  side_low/side_high flag the quads at the key's
-    along-edge ends, which carry the slanted side faces.
-    """
-
-    def shift(point, depth):
-        return (
-            point[0] + depth * direction[0],
-            point[1] + depth * direction[1],
-            point[2] + depth * direction[2],
-        )
-
-    v_lines = key_v_lines()
-    first = v_lines[0]
-    last = v_lines[-1]
-    triangles = []
-    # the top and bottom bands of the wall stay
-    point_tl = bilinear_point(p_a, p_b, q_a, q_b, 0.0, first)
-    point_tr = bilinear_point(p_a, p_b, q_a, q_b, 1.0, first)
-    triangles.extend(quad_triangles(p_a, p_b, point_tr, point_tl))
-    point_bl = bilinear_point(p_a, p_b, q_a, q_b, 0.0, last)
-    point_br = bilinear_point(p_a, p_b, q_a, q_b, 1.0, last)
-    triangles.extend(quad_triangles(point_bl, point_br, q_b, q_a))
-    # the lens band: offset sub-quads at the v-lines, plus the side faces
-    for index in range(len(v_lines) - 1):
-        v_a = v_lines[index]
-        v_b = v_lines[index + 1]
-        if v_b - v_a < 1e-9:
-            continue
-        d_a = key_depth(v_a, offset_mm)
-        d_b = key_depth(v_b, offset_mm)
-        pa_low = bilinear_point(p_a, p_b, q_a, q_b, 0.0, v_a)
-        pa_high = bilinear_point(p_a, p_b, q_a, q_b, 1.0, v_a)
-        pb_low = bilinear_point(p_a, p_b, q_a, q_b, 0.0, v_b)
-        pb_high = bilinear_point(p_a, p_b, q_a, q_b, 1.0, v_b)
-        triangles.extend(
-            quad_triangles(
-                shift(pa_low, d_a),
-                shift(pa_high, d_a),
-                shift(pb_high, d_b),
-                shift(pb_low, d_b),
-            )
-        )
-        if side_low:
-            if d_a < 1e-9:
-                triangles.append((pa_low, pb_low, shift(pb_low, d_b)))
-            elif d_b < 1e-9:
-                triangles.append((pa_low, pb_low, shift(pa_low, d_a)))
-            else:
-                triangles.extend(
-                    quad_triangles(
-                        pa_low, pb_low, shift(pb_low, d_b), shift(pa_low, d_a)
-                    )
-                )
-        if side_high:
-            if d_a < 1e-9:
-                triangles.append((pa_high, pb_high, shift(pb_high, d_b)))
-            elif d_b < 1e-9:
-                triangles.append((pa_high, pb_high, shift(pa_high, d_a)))
-            else:
-                triangles.extend(
-                    quad_triangles(
-                        pa_high, pb_high, shift(pb_high, d_b), shift(pa_high, d_a)
-                    )
-                )
-    return triangles
-
-
-def wall_triangles(boundary, edges, keys, z_bottom):
-    """Wall quads chamfered through the globe center, with vertical
-    lens-shaped fin/groove alignment keys where decided.
-
-    The keys are vertical and taper to zero at both ends, so every key
-    surface is slanted and the tiles print without supports.
-    Returns (triangles, planes, keys_placed)."""
     n = len(boundary)
     interior_point = (
         sum(point[0] for point in boundary) / n,
         sum(point[1] for point in boundary) / n,
         sum(point[2] for point in boundary) / n,
     )
-    quad_key = {}
-    key_specs = []
-    for key in keys:
-        name = key["edge"]
-        kind = key["kind"]
-        index = key["index"]
-        start, count = edges[name]
-        if count < 5:
-            continue
-        p_a = boundary[index % n]
-        p_b = boundary[(index + 1) % n]
-        q_a = radial_projection(p_a, z_bottom)
-        q_b = radial_projection(p_b, z_bottom)
-        offset_mm, direction = key_geometry(
-            p_a, p_b, q_a, q_b, kind, interior_point
-        )
-        width_quad = vec_len(vec_sub(p_b, p_a))
-        half = max(
-            1,
-            int(
-                round(
-                    (KEY_STUD_WIDTH_MM if kind == "stud" else KEY_SOCKET_WIDTH_MM)
-                    / (2.0 * width_quad)
-                )
-            ),
-        )
-        if name == "ring":
-            k0 = (index - half) % n
-            k1 = (index + half - 1) % n
-        else:
-            k0 = max(start + 1, index - half)
-            k1 = min(start + count - 2, index + half - 1)
-        if k1 - k0 < 1:
-            continue
-        spec = {
-            "kind": kind,
-            "edge": name,
-            "k0": k0,
-            "k1": k1,
-            "offset_mm": offset_mm,
-            "direction": direction,
-        }
-        for j in range(k0, k1 + 1):
-            quad_key[j % n] = spec
-        key_specs.append(spec)
-
-    def transition(j, spec, side):
-        """Plain quad adjacent to a key, with the shared edge subdivided at
-        every lens v-line (fan from the opposite vertex)."""
-        p_a = boundary[j]
-        p_b = boundary[(j + 1) % n]
-        q_a = radial_projection(p_a, z_bottom)
-        q_b = radial_projection(p_b, z_bottom)
-        key_quad_index = spec["k0"] if side == "low" else spec["k1"]
-        u = 0.0 if side == "low" else 1.0
-        kp_a = boundary[key_quad_index]
-        kp_b = boundary[(key_quad_index + 1) % n]
-        kq_a = radial_projection(kp_a, z_bottom)
-        kq_b = radial_projection(kp_b, z_bottom)
-        splits = [bilinear_point(kp_a, kp_b, kq_a, kq_b, u, v) for v in key_v_lines()]
-        if side == "low":
-            triangles = [(p_a, p_b, splits[0])]
-            for m in range(len(splits) - 1):
-                triangles.append((p_a, splits[m], splits[m + 1]))
-            triangles.append((p_a, splits[-1], q_b))
-            triangles.append((p_a, q_b, q_a))
-            return triangles
-        triangles = [(p_b, p_a, splits[0])]
-        for m in range(len(splits) - 1):
-            triangles.append((p_b, splits[m], splits[m + 1]))
-        triangles.append((p_b, splits[-1], q_a))
-        triangles.append((p_b, q_a, q_b))
-        return triangles
-
-    transition_fans = {}
-    for spec in key_specs:
-        low = spec["k0"] - 1
-        high = (spec["k1"] + 1) % n
-        if low not in quad_key and 0 <= low < n:
-            transition_fans[low] = (spec, "low")
-        if high not in quad_key:
-            transition_fans[high] = (spec, "high")
-
     triangles = []
     planes = []
     for j in range(n):
@@ -1352,29 +403,10 @@ def wall_triangles(boundary, edges, keys, z_bottom):
         p_b = boundary[(j + 1) % n]
         q_a = radial_projection(p_a, z_bottom)
         q_b = radial_projection(p_b, z_bottom)
+        triangles.extend(quad_triangles(p_a, p_b, q_b, q_a))
         planes.append((wall_plane_normal(p_a, p_b, interior_point), p_a))
-        if j in transition_fans:
-            spec, side = transition_fans[j]
-            triangles.extend(transition(j, spec, side))
-            continue
-        spec = quad_key.get(j)
-        if spec is None:
-            triangles.extend(quad_triangles(p_a, p_b, q_b, q_a))
-            continue
-        triangles.extend(
-            key_quad_triangles(
-                p_a,
-                p_b,
-                q_a,
-                q_b,
-                spec["kind"],
-                spec["offset_mm"],
-                spec["direction"],
-                j == spec["k0"],
-                j == spec["k1"],
-            )
-        )
-    return triangles, planes, key_specs
+    return triangles, planes
+
 
 
 # --- underside identifying mark ---------------------------------------------
@@ -1834,13 +866,12 @@ def bottom_face(polygon, text):
     return triangles, faces_bottom, text
 
 
-def build_mesh(tile, latitudes, longitudes, elevation_mm, radius_mm, base_mm, keys):
+def build_mesh(tile, latitudes, longitudes, elevation_mm, radius_mm, base_mm):
     """Triangle soup for one tile; bottom plane translated to z = 0.
 
     The walls are chamfered so each wall plane contains the globe center;
-    vertical fin/groove alignment keys run down the mating walls; the tile
-    id is engraved on the underside.  Returns (triangles, boundary_edges,
-    features).
+    the tile id is engraved on the underside.  Returns (triangles,
+    boundary_edges, features).
     """
     center_lat, center_lon = tile_center(tile)
     frame = local_frame(center_lat, center_lon)
@@ -1848,7 +879,7 @@ def build_mesh(tile, latitudes, longitudes, elevation_mm, radius_mm, base_mm, ke
     z_bottom = min(point[2] for row in top for point in row) - base_mm
 
     boundary, edges, lats, lons = boundary_ring(tile, top, latitudes, longitudes)
-    triangles, planes, keys_placed = wall_triangles(boundary, edges, keys, z_bottom)
+    triangles, planes = wall_triangles(boundary, z_bottom)
 
     def translate(point):
         return (point[0], point[1], point[2] - z_bottom)
@@ -1860,40 +891,6 @@ def build_mesh(tile, latitudes, longitudes, elevation_mm, radius_mm, base_mm, ke
 
     polygon = [translate(radial_projection(point, z_bottom)) for point in boundary]
     bottom, faces_bottom, label_used = bottom_face(polygon, tile_label(tile))
-    if tile["lat_min"] == 0.0 or tile["lat_max"] == 0.0:
-        # First-row tiles sit on the rib (N00 above the equator, S30 below
-        # it in the 30-degree scheme): cut the socket (groove) into the
-        # underside so the rib's stud fin seats in it.  The opening is fully
-        # inside the bottom face; each fan triangle that reaches it is
-        # re-triangulated around the opening, and the socket's walls + floor
-        # fill the hole.
-        strip = rib_key_strip_local(tile, z_bottom, 0.0, 10.0,
-                                    KEY_SOCKET_WIDTH_MM)
-        opening = socket_recess_triangles(strip, KEY_SOCKET_DEPTH_MM)
-        clipped = []
-        hole_segments = []
-        for triangle in bottom:
-            inside = _clip_polygon_inside(triangle, opening)
-            if not inside:
-                clipped.append(triangle)
-                continue
-            triangles_region, segments = _triangulate_minus(triangle, inside)
-            clipped.extend(triangles_region)
-            hole_segments.extend(segments)
-        bottom = clipped
-        for loop in _stitch_loops(hole_segments):
-            if _signed_area2(loop) < 0.0:
-                loop.reverse()
-            walls, floor = socket_walls_and_floor(loop, KEY_SOCKET_DEPTH_MM)
-            bottom.extend(walls)
-            bottom.extend(floor)
-        faces_bottom = sum(
-            1
-            for point_a, point_b, point_c in bottom
-            if abs(point_a[2]) <= 1e-9
-            and abs(point_b[2]) <= 1e-9
-            and abs(point_c[2]) <= 1e-9
-        )
     triangles.extend(bottom)
 
     # top surface: rows of quads; polar caps fan to the pole
@@ -1945,7 +942,6 @@ def build_mesh(tile, latitudes, longitudes, elevation_mm, radius_mm, base_mm, ke
 
     features = {
         "wall_planes": planes,
-        "keys": keys_placed,
         "id_mark": label_used,
         "faces_bottom": faces_bottom,
     }
@@ -2226,10 +1222,8 @@ def run_build(arguments):
             )
         )
 
-        # Pass 1: sample each tile's elevations, compute the wall geometry
-        # and per-sample widths, and decide the vertical keys pair-wise.
+        # Pass 1: sample each tile's elevations.
         tile_data = []
-        geometry = {}
         for tile in tiles:
             latitudes, longitudes = grid_lines(tile, arguments.sample_degrees)
             elevations = sample_grid(grid, transform, latitudes, longitudes)
@@ -2240,21 +1234,6 @@ def run_build(arguments):
                 ]
                 for row in elevations
             ]
-            center_lat, center_lon = tile_center(tile)
-            frame = local_frame(center_lat, center_lon)
-            top = top_grid(
-                tile, latitudes, longitudes, elevation_mm, arguments.radius_mm, frame
-            )
-            z_bottom = min(point[2] for row in top for point in row) - arguments.base_mm
-            boundary, edges, lats, lons = boundary_ring(
-                tile, top, latitudes, longitudes
-            )
-            geometry[tile["id"]] = {
-                "widths": sample_widths(boundary, z_bottom),
-                "edges": edges,
-                "lats": lats,
-                "lons": lons,
-            }
             tile_data.append(
                 {
                     "tile": tile,
@@ -2263,7 +1242,6 @@ def run_build(arguments):
                     "elevation_mm": elevation_mm,
                 }
             )
-        decisions = key_decisions(tiles, geometry, arguments.band_degrees)
 
         # Pass 2: build the meshes and write the tiles.
         manifest_tiles = []
@@ -2276,7 +1254,6 @@ def run_build(arguments):
                 data["elevation_mm"],
                 arguments.radius_mm,
                 arguments.base_mm,
-                decisions[tile["id"]],
             )
             path_stl = os.path.join(arguments.output_dir, tile["id"] + ".stl")
             write_stl(
@@ -2307,7 +1284,6 @@ def run_build(arguments):
                     "triangles": len(triangles),
                     "edges_boundary": boundary_edges,
                     "faces_bottom": features["faces_bottom"],
-                    "keys": features["keys"],
                     "id_mark": features["id_mark"],
                     "size_bytes": os.path.getsize(path_stl),
                 }
