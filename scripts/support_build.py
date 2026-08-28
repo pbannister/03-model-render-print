@@ -78,10 +78,11 @@ def solid_hemisphere(radius_mm, north, sample_degrees):
 def shell_hemisphere(radius_mm, bore_radius_mm, north, sample_degrees):
     """Solid hemisphere minus a central vertical (polar-axis) cylinder.
 
-    The cylinder of radius `bore_radius_mm` runs from the equator face up
-    to where it meets the sphere (lat phi_max = acos(bore/radius)); the
-    shell closes there, so the bore is a cavity open only at the equator
-    face.  Returns (triangles, boundary_count).
+    The cylinder of radius `bore_radius_mm` runs through the whole solid:
+    the bore opens at the equator face and exits through the top — the
+    solid ends at the rim where the bore meets the sphere (lat phi_max =
+    acos(bore/radius), z = R sin phi_max), so the bore is open at both
+    ends.  Returns (triangles, boundary_count).
     """
     count_lon = max(24, int(round(360.0 / sample_degrees)))
     phi_max = math.acos(max(0.0, min(1.0, bore_radius_mm / radius_mm)))
@@ -235,7 +236,7 @@ def run(arguments):
                 north,
                 arguments.sample_degrees,
             )
-            description = "hemispherical shell with %g mm bore (step 2)" % (
+            description = "hemispherical shell with %g mm through-bore (step 2)" % (
                 arguments.bore_mm
             )
         else:

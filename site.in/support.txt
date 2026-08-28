@@ -52,3 +52,4 @@ faint wireframe sphere is the globe's surface (R = 100 mm).</p>
     color: #8899aa;
 }
 </style>
+<script type="module" src="./support-view.js"></script>

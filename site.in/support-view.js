@@ -41,7 +41,7 @@ const fill = new THREE.DirectionalLight(0x88aaff, 0.25);
 fill.position.set(-300, -200, -250);
 scene.add(fill);
 
-// faint wireframe of the globe surface, so the frame's extent is clear
+// faint wireframe of the globe surface, so the support's extent is clear
 const globeOutline = new THREE.Mesh(
     new THREE.SphereGeometry(103, 48, 24),
     new THREE.MeshBasicMaterial({ wireframe: true, color: 0x3a6ea5,
@@ -104,7 +104,7 @@ function parseObj(text) {
 async function loadModel() {
     const response = await fetch('./support-north.obj');
     if (!response.ok) {
-        throw new Error('frame model not found (HTTP ' + response.status + ')');
+        throw new Error('support model not found (HTTP ' + response.status + ')');
     }
     const geometries = parseObj(await response.text());
     let triangleCount = 0;

@@ -120,10 +120,11 @@ of latitude and longitude; each tile is an STL file that:
 - Step 1: the solid hemisphere (radius `radius_mm`, default 100) with a
   flat equator face at z = 0 (the bed plane when printed).
 - Step 2: subtract an 80 mm-diameter cylinder (just inside the 60°-row's
-  100 mm diameter). The bore runs from the equator face up to where it
-  meets the sphere (lat arccos(40/100) = 66.4°, z = 91.65) and closes at
-  the top; the shell is 60 mm thick at the equator, ~47 mm at the 30° row
-  and 10 mm at the 60° row.
+  100 mm diameter). The bore is a through-hole: it opens at the equator
+  face and exits through the top — the solid ends at the rim where the
+  bore meets the sphere (lat arccos(40/100) = 66.4°, z = 91.65), so the
+  bore is open at both ends. The shell is 60 mm thick at the equator,
+  ~47 mm at the 30° row and 10 mm at the 60° row.
 - Step 3: the assembled view (`support.html`, `make support`) shows the
   support with all rows of tiles of the hemisphere (north: N00, N30, N90).
   The tiles' flat bottoms sit at world radii ~91–105 mm, so the support's
