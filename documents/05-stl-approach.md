@@ -82,8 +82,10 @@ of latitude and longitude; each tile is an STL file that:
   mating groove exists (pair-wise decision from the wall heights at the
   key position), so every fin meets a groove in the assembled globe. Each
   key tapers to zero depth at both ends (a lens over the reference height
-  of 8 mm), so every key surface is slanted and the tiles print without
-  supports. The equator join (N00 south ↔ S30 north) carries no wall key:
+  of 3.2 mm — the shortest wall that hosts a key, so keys appear on every
+  tile boundary in the real build), so every key surface is slanted and
+  the tiles print without supports. The equator join (N00 south ↔ S30
+  north) carries no wall key:
   the rib seats the first rows and the tile-to-ring socket stays centred
   on the underside instead (see Assembly).
 - Underside mark: the tile id (e.g. `N30E045`) is engraved as recessed
@@ -199,10 +201,11 @@ of latitude and longitude; each tile is an STL file that:
   first keys were horizontal ridges along the edges, and the printed
   tiles needed a great deal of supports, so the keys were re-oriented.
 - 2026-08-26 — **Lens-shaped keys**. The vertical fins and grooves taper
-  to zero depth at both ends (a lens over the reference height of 8 mm),
+  to zero depth at both ends (a lens over the reference height of 3.2 mm),
   so they have no horizontal end faces at all. Reason: the slicer flagged
   the flat bottom-end shelves and groove ceilings of the plain vertical
   keys as floating regions; the lens makes every key surface slanted.
+  (The reference was originally 8 mm; see the 2026-08-27 entry below.)
 - 2026-08-26 — **Underside id: engraved (recessed) tile id on the
   underside**. Reason: the user asked for an identifying mark to aid
   assembly; engraving keeps z = 0 so the tile still sits flat on the bed.
@@ -234,3 +237,20 @@ of latitude and longitude; each tile is an STL file that:
   opening are re-triangulated around it (region boundary walked and ear
   clipped per triangle), and walls + floor close the recess. Verified
   watertight with `make check` on the full real-data tile set.
+- 2026-08-27 — **Between-tile wall keys on every boundary: the key lens
+  reference (and its gate) drops from 8 mm to 3.2 mm, with the lens
+  constants scaled proportionally, and the north fins are placed one per
+  overlapping tile above (at the overlap's centre) instead of one per
+  tile.** Reason: the real-data wall heights at the boundary mid-samples
+  are ~6.8–8.3 mm (band tiles) and ~3.5 mm (polar-cap rings), so the 8 mm
+  gate placed keys on almost no boundary at all (2 of 162 in the real
+  build). The lens profile is scale-invariant — the depth is a function of
+  the v-fraction times the reference, so scaling reference and constants
+  together leaves the key geometry unchanged — and the gate now admits
+  every boundary (the shortest, the cap rings at ~3.5 mm, still host the
+  lens). The equal-area bands hold different tile counts (12 tiles at
+  0–30° against 8 at 30–60°), so the joins misalign; placing each fin at
+  the overlap's centre (and deriving every socket from its fin's actual
+  position) keys every shared segment, with fins and sockets exactly
+  matched (88 = 88 in the real build). The equator join stays unkeyed
+  (the rib seats the first rows).

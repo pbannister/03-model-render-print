@@ -390,15 +390,19 @@ def quad_triangles(point_a, point_b, point_c, point_d):
     return [(point_a, point_b, point_c), (point_a, point_c, point_d)]
 
 
-KEY_MIN_WIDTH_MM = 8.0  # minimum wall height that hosts a key
+KEY_MIN_WIDTH_MM = 3.2  # minimum wall height that hosts a key
 KEY_STUD_WIDTH_MM = 3.0  # fin width along the edge
 KEY_STUD_HEIGHT_MM = 2.0  # fin protrusion from the wall plane
 KEY_SOCKET_WIDTH_MM = 4.0  # groove width along the edge (fin + 0.5/side)
 KEY_SOCKET_DEPTH_MM = 3.0  # groove depth (fin plus 1.0 mm engagement slack)
-KEY_LENS_TOP_MM = 1.5  # key depth is 0 in the top 1.5 mm of the wall
-KEY_LENS_RISE_MM = 3.5  # depth rises to its maximum over 3.5 mm
-KEY_LENS_BOTTOM_MM = 1.5  # key depth is 0 in the bottom 1.5 mm
-KEY_LENS_FALL_MM = 3.5  # depth falls to 0 over 3.5 mm
+# Lens profile.  The key's depth is 0 in the top/bottom KEY_LENS_*_MM bands
+# of its reference height (KEY_MIN_WIDTH_MM), rising to full depth in
+# between; the constants scale with the reference so the profile (and thus
+# every fin/groove) stays identical on any wall.
+KEY_LENS_TOP_MM = 0.6  # key depth is 0 in the top 0.6 mm of the reference
+KEY_LENS_RISE_MM = 1.4  # depth rises to its maximum over 1.4 mm
+KEY_LENS_BOTTOM_MM = 0.6  # key depth is 0 in the bottom 0.6 mm
+KEY_LENS_FALL_MM = 1.4  # depth falls to 0 over 1.4 mm
 GROOVE_DEPTH_MM = 0.6  # underside mark groove depth
 
 # Tile-to-ring key (rib fin / tile-back socket) trapezoid profile, in
@@ -976,6 +980,54 @@ def key_decisions(tiles, geometry, band_degrees):
                 # the rib seats the first rows, so the wall key would only
                 # fight the centred tile-to-ring socket
                 continue
+            if edge == "north":
+                # The band above may hold a different number of tiles
+                # (equal-area bands: 12 tiles at 0-30 deg against 8 at
+                # 30-60 deg), so the joins misalign.  Place one fin per
+                # overlapping tile above, at the overlap's centre, so every
+                # shared boundary segment gets its key.
+                for other in tiles:
+                    if other["lat_min"] != tile["lat_max"]:
+                        continue
+                    if other["is_cap"]:
+                        if not (
+                            other["lon_min"] <= tile["lon_min"]
+                            and tile["lon_max"] <= other["lon_max"]
+                        ):
+                            continue
+                        mid_lon = (tile["lon_min"] + tile["lon_max"]) / 2.0
+                        index = mid_index(tile, "north")
+                        mate_edge = "ring"
+                        mate_index = sample_near(
+                            other, "ring", tile["lat_max"], mid_lon
+                        )
+                    else:
+                        if not (
+                            other["lon_max"] > tile["lon_min"]
+                            and other["lon_min"] < tile["lon_max"]
+                        ):
+                            continue
+                        mid_lon = (
+                            max(tile["lon_min"], other["lon_min"])
+                            + min(tile["lon_max"], other["lon_max"])
+                        ) / 2.0
+                        index = sample_near(tile, "north", tile["lat_max"], mid_lon)
+                        mate_edge = "south"
+                        mate_index = sample_near(
+                            other, "south", tile["lat_max"], mid_lon
+                        )
+                    own = width_at(tile, "north", index)
+                    mate = width_at(other, mate_edge, mate_index)
+                    if (
+                        own is not None
+                        and own >= KEY_MIN_WIDTH_MM
+                        and mate is not None
+                        and mate >= KEY_MIN_WIDTH_MM
+                    ):
+                        decisions[tile["id"]].append(
+                            {"edge": "north", "kind": "stud", "index": index}
+                        )
+                continue
             index = mid_index(tile, edge)
             own = width_at(tile, edge, index)
             mate = mate_width(tile, edge, index)
@@ -1019,22 +1071,19 @@ def key_decisions(tiles, geometry, band_degrees):
                 if not adjacent:
                     continue
                 pole_edge = "north" if tile["lat_max"] == 90.0 else "south"
-                fin = next(
-                    (k for k in fins_placed(other["id"]) if k["edge"] == pole_edge),
-                    None,
-                )
-                if fin is None:
-                    continue
-                mid_lon = (other["lon_min"] + other["lon_max"]) / 2.0
-                ring_index = sample_near(
-                    tile,
-                    "ring",
-                    other["lat_max"] if pole_edge == "north" else other["lat_min"],
-                    mid_lon,
-                )
-                decisions[tile["id"]].append(
-                    {"edge": "ring", "kind": "socket", "index": ring_index}
-                )
+                for fin in fins_placed(other["id"]):
+                    if fin["edge"] != pole_edge:
+                        continue
+                    fin_lon = geom(other)["lons"][fin["index"]]
+                    ring_index = sample_near(
+                        tile,
+                        "ring",
+                        other["lat_max"] if pole_edge == "north" else other["lat_min"],
+                        fin_lon,
+                    )
+                    decisions[tile["id"]].append(
+                        {"edge": "ring", "kind": "socket", "index": ring_index}
+                    )
             continue
         lon_min = tile["lon_min"]
         for other in tiles:
@@ -1066,16 +1115,18 @@ def key_decisions(tiles, geometry, band_degrees):
                 and other["lon_min"] < tile["lon_max"]
             ):
                 continue
-            fin = next(
-                (k for k in fins_placed(other["id"]) if k["edge"] == "north"), None
-            )
-            if fin is None:
-                continue
-            mid_lon = (other["lon_min"] + other["lon_max"]) / 2.0
-            south_index = sample_near(tile, "south", tile["lat_min"], mid_lon)
-            decisions[tile["id"]].append(
-                {"edge": "south", "kind": "socket", "index": south_index}
-            )
+            for fin in fins_placed(other["id"]):
+                if fin["edge"] != "north":
+                    continue
+                fin_lon = geom(other)["lons"][fin["index"]]
+                if not (tile["lon_min"] <= fin_lon < tile["lon_max"]):
+                    # the fin's along-edge position falls outside this
+                    # tile's span: no socket, so no orphan groove
+                    continue
+                south_index = sample_near(tile, "south", tile["lat_min"], fin_lon)
+                decisions[tile["id"]].append(
+                    {"edge": "south", "kind": "socket", "index": south_index}
+                )
     return decisions
 
 
