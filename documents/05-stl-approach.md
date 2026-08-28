@@ -112,25 +112,14 @@ of latitude and longitude; each tile is an STL file that:
   sockets and between-tile wall keys. The ribs, the sockets and the wall
   keys are **dropped** (see the decision log below).
 
-## Assembly (current: interior support)
+## Assembly (current: STEP export of the hemisphere)
 
-- The new approach fills the interior of each hemisphere with a **single
-  solid** (the support) and subtracts a **vertical (polar-axis) cylinder**
-  from it, leaving a shell the tiles sit on.
-- Step 1: the solid hemisphere (radius `radius_mm`, default 100) with a
-  flat equator face at z = 0 (the bed plane when printed).
-- Step 2: subtract a **conical bore** — the cone's base at the equator is
-  160 mm in diameter and its wall tilts inward at 45° as it ascends
-  (radius(z) = 80 − z), narrowing to a point at z = 80 mm. The dome above
-  the apex stays, so the bore is a conical pocket open only at the equator
-  face; the shell is 20 mm thick at the equator face and thickens upward
-  (the wall between the cone and the sphere). The diameter and angle are
-  parameters (`--bore-diameter-mm`, `--bore-angle-deg`).
-- Step 3: the assembled view (`support.html`, `make support`) shows the
-  support with all rows of tiles of the hemisphere (north: N00, N30, N90).
-  The tiles' flat bottoms sit at world radii ~91–105 mm, so the support's
-  outer radius must be tuned (≈90 mm, or a faceted surface matching each
-  tile's bottom plane) for the tiles to seat without intersecting it.
+- The support plans (interior solid + bore) are dropped. The tiles remain
+  the deliverable; a hemisphere (tiles only) can be exported as a STEP
+  file (AP214, one solid per tile at its world position) for editing in a
+  CAD tool: `python3 scripts/hemisphere_step.py` writes
+  `dataflow.out/step/hemisphere-north.step` (sample density and hemisphere
+  are parameters; the default 5-degree sampling keeps the file compact).
 
 ## Row diameters
 
@@ -194,13 +183,10 @@ of latitude and longitude; each tile is an STL file that:
   at z = 0, expected bounds, positive signed volume** via `make check`.
   Reason: these are the properties slicers rely on.
 - 2026-08-27 — **Ribs and between-tile alignment keys deleted; the assembly approach is under revision.** The reinforcing ribs (with the tile-to-ring underside sockets) and the wall fin/groove keys are removed from the tile build, the site (the rib page is gone) and this document; the previous state was tagged in git for reference. Row diameters of the base sphere (R = 100 mm) at the 0/30/60-degree rows are 200.0 / 173.2 / 100.0 mm.
-- 2026-08-27 — **Interior support: fill the hemisphere with a single solid,
-  subtract an 80 mm-diameter polar-axis cylinder.** Reason: the ribs only
-  seated the first rows, and a full solid interior gives every row a
-  seating surface. The bore is 80 mm (radius 40) — just inside the 60°-row
-  diameter (100 mm) — so the shell stays 10 mm thick at the 60° row and
-  thicker toward the equator; the bore closes where it meets the sphere
-  (lat 66.4°). The assembled view (`support.html`) shows the support with
-  all rows of tiles. Open fit item: the tiles' flat bottoms sit at world
-  radii ~91–105 mm, so the support's outer radius (or a faceted seating
-  surface) still needs tuning.
+- 2026-08-27 — **Interior support dropped; the hemisphere is exported as
+  a STEP file (tiles only) instead.** The interior-solid-and-bore support
+  did not match what was wanted, so it is removed entirely; the tiles
+  remain the deliverable. A hemisphere (tiles only, one solid per tile at
+  its world position) is written as an AP214 STEP file
+  (`scripts/hemisphere_step.py`) for editing in OnShape or FreeCAD, with
+  the sample density parameterized to keep the file size practical.

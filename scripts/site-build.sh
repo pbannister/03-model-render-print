@@ -76,7 +76,6 @@ page_title() {
         index)     echo "Model Render Print" ;;
         dashboard) echo "Dashboard" ;;
         frame)     echo "Assembly Frame" ;;
-        support)   echo "Interior Support" ;;
         *)         echo "$name_base" ;;
     esac
 }
@@ -131,10 +130,4 @@ if [ -f "$FILE_FRAME_MODEL" ]; then
     echo "site-build: copied the assembly-frame model"
 fi
 
-# Copy the interior support model (if present) for the support page.
-FILE_SUPPORT_MODEL="$REPOSITORY_ROOT/dataflow.out/support/support-north.obj"
-if [ -f "$FILE_SUPPORT_MODEL" ]; then
-    cp "$FILE_SUPPORT_MODEL" "$DIRECTORY_OUTPUT/support-north.obj"
-    echo "site-build: copied the interior support model"
-fi
 exit 0

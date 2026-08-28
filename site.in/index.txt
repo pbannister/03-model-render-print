@@ -42,13 +42,15 @@ approach is decided in <code>documents/05-stl-approach.md</code>.
 <h2>Assembly plan</h2>
 
 <ul>
-  <li>Each hemisphere's interior is filled with a single solid support and
-      a vertical 80 mm cylinder is subtracted, leaving a shell the tiles
-      sit on; the rows assemble over it. Interactive view:
-      <a href="support.html">support.html</a>.</li>
+  <li>Tiles are printed flat and assembled over the globe's curvature;
+      adjacent tiles mate along chamfered walls through the globe center,
+      so each shared edge pair lies in one common plane. A hemisphere
+      (tiles only) can be exported as a STEP file for CAD work:
+      <code>python3 scripts/hemisphere_step.py</code>.</li>
   <li>Superseded: the internal hub-and-strut frame
-      (<a href="frame.html">frame.html</a>, <code>make frame</code>) and
-      the reinforcing-rib plan have been dropped.</li>
+      (<a href="frame.html">frame.html</a>, <code>make frame</code>), the
+      reinforcing-rib plan, and the interior-support plan have been
+      dropped.</li>
 </ul>
 
 <h2>Documentation</h2>
