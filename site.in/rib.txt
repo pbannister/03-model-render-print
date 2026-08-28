@@ -13,8 +13,9 @@ true.</p>
 series of flat facets, one per first-row tile, each lying in that tile's
 bottom plane, so every facet mates flush with the tile's inner face. Each
 facet also carries a centred <strong>stud fin</strong> (3 mm wide, 2 mm deep,
-chamfered ends) that seats into a matching socket cut in the tile's
-underside, so the first row cannot slide sideways on the rib. The
+chamfered ends) that seats into a matching <strong>socket</strong> (a groove
+4 mm wide, 3 mm deep) cut in the tile's underside, so the first row cannot
+slide sideways on the rib. The
 rib's inside diameter is 20 mm less than the globe's sea-level diameter
 (200 mm), i.e. 180 mm (inner radius 90 mm), and it is 10 mm thick. One rib
 is printed per hemisphere:

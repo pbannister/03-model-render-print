@@ -83,7 +83,9 @@ of latitude and longitude; each tile is an STL file that:
   key position), so every fin meets a groove in the assembled globe. Each
   key tapers to zero depth at both ends (a lens over the reference height
   of 8 mm), so every key surface is slanted and the tiles print without
-  supports.
+  supports. The equator join (N00 south ↔ S30 north) carries no wall key:
+  the rib seats the first rows and the tile-to-ring socket stays centred
+  on the underside instead (see Assembly).
 - Underside mark: the tile id (e.g. `N30E045`) is engraved as recessed
   grooves on the underside (z stays 0; the grooves cut upward into the
   base). Engraved, not raised, so the tile still sits flat on the bed.
@@ -127,8 +129,10 @@ of latitude and longitude; each tile is an STL file that:
   facets, one per first-row tile, each lying in that tile's bottom plane, so
   the rib's outer faces make full contact with the tiles' inner (flat-bottom)
   faces. Each facet carries a centred trapezoidal **stud fin** (3 mm wide,
-  2 mm deep, chamfered ends) that seats into a matching socket cut in the
-  tile's underside, so the first row cannot slide sideways on the rib. Its
+  2 mm deep, chamfered ends) that seats into a matching **socket** (groove)
+  cut in the tile's underside — 4 mm wide, 3 mm deep, spanning the fin's
+  full base band so the fin drops fully in with 0.5 mm side and 1 mm depth
+  slack — so the first row cannot slide sideways on the rib. Its
   inside diameter is 20 mm less than the sea-level diameter
   (200 mm → 180 mm, inner radius 90 mm) and it is 10 mm thick. One rib is
   printed per hemisphere (`rib-north.stl` / `rib-south.stl`, both flat at
@@ -218,3 +222,15 @@ of latitude and longitude; each tile is an STL file that:
   a cylindrical outer face would leave gaps against the tiles' flat bottoms;
   matching each tile's bottom plane makes full contact and seats the first
   row without play. One rib prints per hemisphere, flat at z = 0.
+- 2026-08-27 — **Tile-to-ring sockets: a recessed groove (4 mm wide, 3 mm
+  deep) cut into the underside of every first-row tile (N00 north, S30
+  south), centred on the tile's longitude, receiving the rib facet's stud
+  fin; the equator wall key (N00 south ↔ S30 north) is dropped.** Reason:
+  the printed rib + tiles showed the fin seats well, and the fin needs a
+  receiving groove so the first row cannot slide sideways on the rib; the
+  equator wall key was dropped so the socket can stay centred on the tile
+  longitude without a competing wall key at the same position. The socket
+  is a true hole in the bottom face: the fan triangles that reach the
+  opening are re-triangulated around it (region boundary walked and ear
+  clipped per triangle), and walls + floor close the recess. Verified
+  watertight with `make check` on the full real-data tile set.
