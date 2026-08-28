@@ -345,9 +345,10 @@ def vec_len(vector):
     )
 
 
-def wall_plane_normal(p_a, p_b, interior_direction):
+def wall_plane_normal(p_a, p_b, interior_point):
     """Unit normal of the wall plane span(p_a, p_b) pointing away from the
-    tile interior."""
+    tile interior (referenced by interior_point, e.g. the boundary
+    centroid)."""
     normal = (
         p_a[1] * p_b[2] - p_a[2] * p_b[1],
         p_a[2] * p_b[0] - p_a[0] * p_b[2],
@@ -357,7 +358,9 @@ def wall_plane_normal(p_a, p_b, interior_direction):
     if length < 1e-12:
         return (0.0, 0.0, 1.0)
     normal = (normal[0] / length, normal[1] / length, normal[2] / length)
-    if dot(normal, interior_direction) > 0.0:
+    mid = ((p_a[0] + p_b[0]) / 2.0, (p_a[1] + p_b[1]) / 2.0,
+           (p_a[2] + p_b[2]) / 2.0)
+    if dot(normal, vec_sub(interior_point, mid)) > 0.0:
         normal = (-normal[0], -normal[1], -normal[2])
     return normal
 
@@ -400,9 +403,9 @@ KEY_SOCKET_DEPTH_MM = 3.0  # groove depth (fin plus 1.0 mm engagement slack)
 # between; the constants scale with the reference so the profile (and thus
 # every fin/groove) stays identical on any wall.
 KEY_LENS_TOP_MM = 0.6  # key depth is 0 in the top 0.6 mm of the reference
-KEY_LENS_RISE_MM = 1.4  # depth rises to its maximum over 1.4 mm
+KEY_LENS_RISE_MM = 0.6  # depth rises to its maximum over 0.6 mm
 KEY_LENS_BOTTOM_MM = 0.6  # key depth is 0 in the bottom 0.6 mm
-KEY_LENS_FALL_MM = 1.4  # depth falls to 0 over 1.4 mm
+KEY_LENS_FALL_MM = 0.6  # depth falls to 0 over 0.6 mm
 GROOVE_DEPTH_MM = 0.6  # underside mark groove depth
 
 # Tile-to-ring key (rib fin / tile-back socket) trapezoid profile, in
@@ -1130,9 +1133,9 @@ def key_decisions(tiles, geometry, band_degrees):
     return decisions
 
 
-def key_geometry(p_a, p_b, q_a, q_b, kind, interior_direction):
+def key_geometry(p_a, p_b, q_a, q_b, kind, interior_point):
     """(offset_mm, direction) for a fin (stud) or groove (socket)."""
-    normal = wall_plane_normal(p_a, p_b, interior_direction)
+    normal = wall_plane_normal(p_a, p_b, interior_point)
     if kind == "stud":
         return KEY_STUD_HEIGHT_MM, normal
     return KEY_SOCKET_DEPTH_MM, (-normal[0], -normal[1], -normal[2])
@@ -1246,7 +1249,7 @@ def key_quad_triangles(
     return triangles
 
 
-def wall_triangles(boundary, edges, keys, z_bottom, interior_direction):
+def wall_triangles(boundary, edges, keys, z_bottom):
     """Wall quads chamfered through the globe center, with vertical
     lens-shaped fin/groove alignment keys where decided.
 
@@ -1254,6 +1257,11 @@ def wall_triangles(boundary, edges, keys, z_bottom, interior_direction):
     surface is slanted and the tiles print without supports.
     Returns (triangles, planes, keys_placed)."""
     n = len(boundary)
+    interior_point = (
+        sum(point[0] for point in boundary) / n,
+        sum(point[1] for point in boundary) / n,
+        sum(point[2] for point in boundary) / n,
+    )
     quad_key = {}
     key_specs = []
     for key in keys:
@@ -1268,7 +1276,7 @@ def wall_triangles(boundary, edges, keys, z_bottom, interior_direction):
         q_a = radial_projection(p_a, z_bottom)
         q_b = radial_projection(p_b, z_bottom)
         offset_mm, direction = key_geometry(
-            p_a, p_b, q_a, q_b, kind, interior_direction
+            p_a, p_b, q_a, q_b, kind, interior_point
         )
         width_quad = vec_len(vec_sub(p_b, p_a))
         half = max(
@@ -1286,7 +1294,7 @@ def wall_triangles(boundary, edges, keys, z_bottom, interior_direction):
         else:
             k0 = max(start + 1, index - half)
             k1 = min(start + count - 2, index + half - 1)
-        if k1 - k0 < 2:
+        if k1 - k0 < 1:
             continue
         spec = {
             "kind": kind,
@@ -1344,7 +1352,7 @@ def wall_triangles(boundary, edges, keys, z_bottom, interior_direction):
         p_b = boundary[(j + 1) % n]
         q_a = radial_projection(p_a, z_bottom)
         q_b = radial_projection(p_b, z_bottom)
-        planes.append((wall_plane_normal(p_a, p_b, interior_direction), p_a))
+        planes.append((wall_plane_normal(p_a, p_b, interior_point), p_a))
         if j in transition_fans:
             spec, side = transition_fans[j]
             triangles.extend(transition(j, spec, side))
@@ -1836,14 +1844,11 @@ def build_mesh(tile, latitudes, longitudes, elevation_mm, radius_mm, base_mm, ke
     """
     center_lat, center_lon = tile_center(tile)
     frame = local_frame(center_lat, center_lon)
-    interior_direction = unit_radial(center_lat, center_lon)
     top = top_grid(tile, latitudes, longitudes, elevation_mm, radius_mm, frame)
     z_bottom = min(point[2] for row in top for point in row) - base_mm
 
     boundary, edges, lats, lons = boundary_ring(tile, top, latitudes, longitudes)
-    triangles, planes, keys_placed = wall_triangles(
-        boundary, edges, keys, z_bottom, interior_direction
-    )
+    triangles, planes, keys_placed = wall_triangles(boundary, edges, keys, z_bottom)
 
     def translate(point):
         return (point[0], point[1], point[2] - z_bottom)

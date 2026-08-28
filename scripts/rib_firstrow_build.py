@@ -291,7 +291,7 @@ def _distance(point_a, point_b):
                      + (point_a[2] - point_b[2]) ** 2)
 
 
-def build_row(tiles_row, radius_mm, base_mm, sampler, sample_degrees):
+def build_row(tiles_row, radius_mm, base_mm, sampler, sample_degrees, decisions):
     """World-space triangle soup for a row of first-row tiles (real relief)."""
     world_pieces = []
     for tile in tiles_row:
@@ -303,7 +303,8 @@ def build_row(tiles_row, radius_mm, base_mm, sampler, sample_degrees):
                              radius_mm, frame)
         z_bottom = min(point[2] for row in top for point in row) - base_mm
         mesh, _, _ = tiles.build_mesh(tile, latitudes, longitudes,
-                                      elevation_mm, radius_mm, base_mm, [])
+                                      elevation_mm, radius_mm, base_mm,
+                                      decisions[tile["id"]])
         world = [
             tuple(local_to_world(vertex, frame, z_bottom) for vertex in tri)
             for tri in mesh
@@ -384,6 +385,31 @@ def run_build(arguments):
         if not north or not south:
             raise RuntimeError("expected N00 and S30 first-row bands")
 
+        # Wall geometry for every tile and the pair-wise key decisions, so
+        # the first-row tiles in the view carry their real between-tile
+        # fins and grooves (not just the rib sockets on their undersides).
+        geometry = {}
+        for tile in all_tiles:
+            latitudes, longitudes = tiles.grid_lines(tile,
+                                                     arguments.sample_degrees)
+            elevation_mm = sampler(latitudes, longitudes)
+            center_lat, center_lon = tiles.tile_center(tile)
+            frame = tiles.local_frame(center_lat, center_lon)
+            top = tiles.top_grid(tile, latitudes, longitudes, elevation_mm,
+                                 arguments.radius_mm, frame)
+            z_bottom = (min(point[2] for row in top for point in row)
+                        - arguments.base_mm)
+            boundary, edges, lats, lons = tiles.boundary_ring(
+                tile, top, latitudes, longitudes)
+            geometry[tile["id"]] = {
+                "widths": tiles.sample_widths(boundary, z_bottom),
+                "edges": edges,
+                "lats": lats,
+                "lons": lons,
+            }
+        decisions = tiles.key_decisions(all_tiles, geometry,
+                                        arguments.band_degrees)
+
         rib_north = build_rib(north, 0.0, RIB_THICKNESS_MM,
                               arguments.radius_mm, arguments.base_mm,
                               sampler, arguments.sample_degrees)
@@ -398,9 +424,9 @@ def run_build(arguments):
         groups = [("rib-north", rib_north), ("rib-south", rib_south),
                   ("equator", equator_ring)]
         groups.extend(build_row(north, arguments.radius_mm, arguments.base_mm,
-                                sampler, arguments.sample_degrees))
+                                sampler, arguments.sample_degrees, decisions))
         groups.extend(build_row(south, arguments.radius_mm, arguments.base_mm,
-                                sampler, arguments.sample_degrees))
+                                sampler, arguments.sample_degrees, decisions))
     finally:
         shutil.rmtree(working, ignore_errors=True)
 

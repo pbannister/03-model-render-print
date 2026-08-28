@@ -254,3 +254,22 @@ of latitude and longitude; each tile is an STL file that:
   position) keys every shared segment, with fins and sockets exactly
   matched (88 = 88 in the real build). The equator join stays unkeyed
   (the rib seats the first rows).
+- 2026-08-27 — **Between-tile keys reach full nominal depth; the rib page
+  renders the real first-row tiles; the ring-wall key direction is
+  fixed.** The lens rise/fall spans were 1.4 mm over the 3.2 mm reference,
+  so the rise and fall overlapped and every key reached only 51% of its
+  nominal depth (1.0 mm fins, 1.5 mm grooves); the spans are now 0.6 mm
+  each, so the lens plateaus at full depth (2.0 mm fins, 3.0 mm grooves)
+  with the same v-lines and slanted end faces. The rib page's first-row
+  tiles were built without wall keys (`keys=[]`), so the assembled view
+  showed only the underside socket insets; the rib build now computes the
+  pair-wise key decisions and renders the real tiles, and the key-quad
+  guard admits two-quad keys so the keys also place at the rib view's
+  1-degree sampling. Finally, the wall normals were oriented away from the
+  tile's interior direction (the radial at the tile centre), which for the
+  polar caps is the pole axis and does not point from the ring wall into
+  the cap body — the ring sockets on the southern cap were inverted
+  (protruding outward instead of recessing, and poking below the bottom
+  plane at full depth). The normals are now oriented away from the
+  boundary centroid, so every fin protrudes and every groove recesses into
+  its own tile.
