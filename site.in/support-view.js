@@ -59,10 +59,11 @@ function clamp(value, low, high) {
 }
 
 function bandOf(group) {
-    if (group === 'SUPPORT') {
+    if (group === 'SUPPORT' || group === 'support-north'
+            || group === 'support-south') {
         return 'SUPPORT';
     }
-    const match = group.match(/^(S90|S60|S30|N00|N30|N90)/);
+    const match = group.match(/^(?:tile-)?(S90|S60|S30|N00|N30|N90)/);
     return match ? match[1] : 'SUPPORT';
 }
 
