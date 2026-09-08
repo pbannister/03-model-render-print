@@ -34,28 +34,19 @@ These conventions define formatting, naming, and repository structure.
 ## 2. Directory Naming
 
 The required directories are:
-
 - `prompts/`
 - `sources/`
 - `scripts/`
-- `tests/`
-- `dataflow.in/`
-- `dataflow.out/`
-- `logs/`
-- `site.in/`
-- `site.out/`
-- `documents/`
-- `records/`
+- `tests/`          -- for unit, integration, script, and prompt-validation tests
+- `dataflow.in/`    -- for input data
+- `dataflow.out/`   -- for generated data output
+- `logs/`           -- for generated logs
+- `site.in/`        -- for static-site input
+- `site.out/`       -- for generated static-site output
+- `documents/`      -- for human-consumption documents
+- `records/`        -- for version-controlled episode outcome records
 
-- Use `tests/` for unit, integration, script, and prompt-validation tests.
-- Use `dataflow.in/` for input data.
-- Use `dataflow.out/` for generated data output.
-- Use `logs/` for generated logs.
-- Use `site.in/` for static-site input.
-- Use `site.out/` for generated static-site output.
-- Use `documents/` for human-consumption documents.
-- Use `records/` for version-controlled episode outcome records.
-- Generated output directories are not version-controlled.
+Generated output directories are not version-controlled.
 
 ## 3. Filename Structure
 
