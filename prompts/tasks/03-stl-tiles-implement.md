@@ -1,6 +1,6 @@
 # Task: Implement the STL Tiles feature
 
-## [TASK]
+## TASK-DESCRIPTION
 
 Implement feature `prompts/features/03-stl-tiles.md` (STL Tiles) in
 `scripts/stl-tiles-build.sh` plus a Python module `scripts/stl_tiles_build.py`
@@ -11,7 +11,7 @@ The build renders the Earth's surface from the ETOPO 2022 source tiles
 tiles in `dataflow.out/stl/` with a manifest, a `--check` validation mode,
 and subset rendering (`--tiles`, `--region`).
 
-## [CONTEXT]
+## TASK-CONTEXT
 
 - The geometry decisions are recorded in `documents/05-stl-approach.md`:
   spherical patch tiles, latitude bands (default 30 degrees) with longitude
@@ -30,7 +30,7 @@ and subset rendering (`--tiles`, `--region`).
   then validates), portable `tests/04-stl-tiles-math.sh` (tiling math
   invariants).
 
-## [FILES]
+## TASK-FILES
 
 - `create scripts/stl-tiles-build.sh`
 - `create scripts/stl_tiles_build.py`
@@ -40,7 +40,7 @@ and subset rendering (`--tiles`, `--region`).
 - `modify scripts/site-state-fetch.sh` (STL tile state keys for the dashboard)
 - `modify TODO.md` (mark the STL tile tasks complete after verification)
 
-## [OUTPUT FORMAT]
+## TASK-OUTPUT
 
 - Implement the files, then run `make build`, `make check`, and `make test`
   from the repository root.

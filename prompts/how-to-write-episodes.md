@@ -25,28 +25,28 @@ This document defines how a human must write episodes for the LLM.
 
 Every episode must contain these sections in order:
 
-- [EPISODE] — A clear statement of the single goal.
-- [ACCEPTANCE] — Checkable criteria phrased as questions.
-- [RISK] (Optional) — Risky assumptions phrased as questions, in order of risk.
-- [SUB-TASKS] (Optional) — The execution plan, one bounded step per bullet.
-- [OUTPUT FORMAT] (Optional) — The response representation.
-- [FILES] (Optional) — The files involved in the episode.
-- [BRANCH] (Optional) — The git branch name for the episode.
+- EPISODE-GOAL — A clear statement of the single goal.
+- EPISODE-ACCEPTANCE — Checkable criteria phrased as questions.
+- EPISODE-RISKS (Optional) — Risky assumptions phrased as questions, in order of risk.
+- EPISODE-TASKS (Optional) — The execution plan, one bounded step per bullet.
+- EPISODE-OUTPUT (Optional) — The response representation.
+- EPISODE-FILES (Optional) — The files involved in the episode.
+- EPISODE-BRANCH (Optional) — The git branch name for the episode.
 
 ## 4. Dispatching an Episode
 
 - Dispatch an episode file as the task for the LLM.
-- The [EPISODE] section is the requested work, equivalent to [TASK] in `prompts/how-to-write-tasks.md`.
-- The [ACCEPTANCE] and [RISK] sections are constraints the model must verify.
-- The [SUB-TASKS] section is the execution plan.
+- The EPISODE-GOAL section is the requested work, equivalent to TASK-DESCRIPTION in `prompts/how-to-write-tasks.md`.
+- The EPISODE-ACCEPTANCE and EPISODE-RISKS sections are constraints the model must verify.
+- The EPISODE-TASKS section is the execution plan.
 
-## 5. Writing the [ACCEPTANCE] Section
+## 5. Writing the EPISODE-ACCEPTANCE Section
 
 - Phrase every acceptance criterion as a question.
 - A question has a checkable answer.
 - An episode is done when every question is answered.
 
-## 6. Writing the [RISK] Section
+## 6. Writing the EPISODE-RISKS Section
 
 - Put the riskiest assumption first.
 - Phrase each risk as a question.
@@ -54,7 +54,7 @@ Every episode must contain these sections in order:
 - The model may draft risk questions.
 - The human orders them and judges the answers.
 
-## 7. Writing the [SUB-TASKS] Section
+## 7. Writing the EPISODE-TASKS Section
 
 - Sub-tasks are the execution plan.
 - Sub-tasks are drafted by the model and ratified by the human.

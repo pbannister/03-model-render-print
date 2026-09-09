@@ -1,15 +1,15 @@
 # Episode: Assembled globe export
 
-[EPISODE]
+## EPISODE-GOAL
 Record each tile's placement in `manifest.json` at build time and add an
 `assemble` mode that merges the tile STLs into one positioned mesh, so the
 assembled globe can be imported into any mesh viewer (OnShape, FreeCAD,
 MeshLab, Blender) for inspection.
 
-[PHASE]
+## EPISODE-PHASE
 phase 1
 
-[ACCEPTANCE]
+## EPISODE-ACCEPTANCE
 - Does `manifest.json` record per-tile placement (`center_lat`,
   `center_lon`, `z_bottom`) for every built tile?
 - Does `stl_tiles_build.py assemble` write `globe.stl` (merged binary STL),
@@ -22,7 +22,7 @@ phase 1
   within print tolerance (1e-3 mm)?
 - Is the whole change reviewable in one sitting?
 
-[RISK]
+## EPISODE-RISKS
 - Is the placement (rotation from the tile-local frame, translation by
   `z_bottom` along the local up axis) exact enough that shared boundaries
   coincide — the neighbors sample the same global grid, but each is placed
@@ -31,7 +31,7 @@ phase 1
   faces make it unsuitable for printing), and is that stated in the
   output and the README?
 
-[SUB-TASKS]
+## EPISODE-TASKS
 - Extend `run_build` to record `center_lat`, `center_lon`, and `z_bottom`
   in each manifest tile entry.
 - Add pure-Python placement helpers (placement from a manifest entry;
@@ -47,11 +47,11 @@ phase 1
 - Add a Makefile `assemble` target and document the output in the README.
 - Run assemble on the full 42-tile set and verify the acceptance counts.
 
-[OUTPUT FORMAT]
+## EPISODE-OUTPUT
 Report the placement math, the changed files, the assembled-output file
 sizes, and the `--check` result.
 
-[FILES]
+## EPISODE-FILES
 - `scripts/stl_tiles_build.py` — existing (build manifest + new assemble mode)
 - `scripts/stl-tiles-build.sh` — existing (mode pass-through, usage comment)
 - `tests/04-stl-tiles-math.sh` — existing
@@ -59,5 +59,5 @@ sizes, and the `--check` result.
 - `Makefile` — existing
 - `README.md` — existing
 
-[BRANCH]
+## EPISODE-BRANCH
 llm/episode-01

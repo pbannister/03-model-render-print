@@ -28,10 +28,10 @@ Also:
 ## 2. Interpret the Task
 
 - Determine the requested operations, target files, constraints, and output format.
-- Treat `[TASK]` as the requested work.
-- Treat `[OUTPUT FORMAT]` as the response representation.
-- Treat `[CONTEXT]` as information that does not add instructions unless explicitly labeled as a constraint.
-- Treat `[FILES]` as scope information that does not authorize modifications by itself.
+- Treat `TASK-DESCRIPTION` as the requested work.
+- Treat `TASK-OUTPUT` as the response representation.
+- Treat `TASK-CONTEXT` as information that does not add instructions unless explicitly labeled as a constraint.
+- Treat `TASK-FILES` as scope information that does not authorize modifications by itself.
 - For every file operation, resolve the exact path before implementation.
 - For a `create` operation, verify that the target path is authorized by the task or by an applicable project rule.
 - For a `modify`, `delete`, or `rename` operation, verify that the referenced path exists or report that it is missing.
@@ -43,7 +43,7 @@ Also:
 
 - Treat a referenced feature file as authoritative requirements for the current task.
 - Do not apply unreferenced feature files.
-- Treat a task file as a detailed task description and apply its `[TASK]`, `[OUTPUT FORMAT]`, `[CONTEXT]`, and `[FILES]` sections according to `prompts/how-to-write-tasks.md`.
+- Treat a task file as a detailed task description and apply its `TASK-DESCRIPTION`, `TASK-OUTPUT`, `TASK-CONTEXT`, and `TASK-FILES` sections according to `prompts/how-to-write-tasks.md`.
 - When a task conflicts with a referenced feature, ask for clarification unless the task explicitly overrides the feature requirement.
 
 ## 3. Plan the Work

@@ -10,13 +10,13 @@ Follow the applicable project rules for all task-writing requirements.
 
 Every task must contain these sections in order:
 
-* [TASK]
+* TASK-DESCRIPTION
 A clear description of the requested work.
-* [OUTPUT FORMAT]
+* TASK-OUTPUT
 A precise description of the response representation.
-* (Optional) [CONTEXT]
+* (Optional) TASK-CONTEXT
 Additional information, requirements, notes, constraints, or file contents.
-* (Optional) [FILES]
+* (Optional) TASK-FILES
 A list of files involved in the task.
 
 The phrase `Execute the next TODO task` explicitly requests TODO-driven execution.
@@ -30,37 +30,37 @@ The phrase `Execute the next TODO task` explicitly requests TODO-driven executio
 * Use a task for one bounded unit of work against the repository.
     * Long-form task definitions belong in `prompts/tasks/` and must follow this document.
     * A task must reference applicable feature files explicitly.
-    * A task may create, modify, delete, rename, or inspect files only when those operations are stated in its `[TASK]` section.
+    * A task may create, modify, delete, rename, or inspect files only when those operations are stated in its `TASK-DESCRIPTION` section.
 
 ## 2. Section Meaning
 
-* [TASK] defines the requested work.
-* [OUTPUT FORMAT] defines the response representation.
-* [CONTEXT] provides information and does not add instructions unless explicitly labeled as a constraint.
-* [FILES] identifies scope and does not authorize modifications by itself.
+* TASK-DESCRIPTION defines the requested work.
+* TASK-OUTPUT defines the response representation.
+* TASK-CONTEXT provides information and does not add instructions unless explicitly labeled as a constraint.
+* TASK-FILES identifies scope and does not authorize modifications by itself.
 
-## 3. Writing the [TASK] Section
+## 3. Writing the TASK-DESCRIPTION Section
 
-* The [TASK] section must:
+* The TASK-DESCRIPTION section must:
     * describe the goal clearly.
     * avoid ambiguity and unstated assumptions.
     * state the operation for each file as `create`, `modify`, `delete`, `rename`, or `inspect`.
     * For every file operation, specify the complete repository-relative path in `backticks`.
     * Do not identify a file only by its purpose, role, or directory.
 
-* The [TASK] section must not:
+* The TASK-DESCRIPTION section must not:
     * mix implementation instructions with output requirements.
 
 Example:
-```ini
-[TASK]
+```markdown
+## TASK-DESCRIPTION
 Create `scripts/site-build.sh`.
 The script generates `site.out/` from `site.in/`.
 ```
 
-## 4. Writing the [OUTPUT FORMAT] Section
+## 4. Writing the TASK-OUTPUT Section
 
-[OUTPUT FORMAT] must be explicit.
+TASK-OUTPUT must be explicit.
 
 * It must specify the required files when file contents are requested.
 * It must specify ordering when multiple files are required.
@@ -69,35 +69,35 @@ The script generates `site.out/` from `site.in/`.
 * It must specify whether filenames are included.
 
 Examples:
-```ini
-[OUTPUT FORMAT]
+```markdown
+## TASK-OUTPUT
 Provide only the complete content of `scripts/site-build.sh`.
 ```
-```ini
-[OUTPUT FORMAT]
+```markdown
+## TASK-OUTPUT
 Produce these complete files in this order:
 1. `sources/auth/auth_handler.cpp`
 2. `sources/auth/auth_handler.h`
 ```
-```ini
-[OUTPUT FORMAT]
+```markdown
+## TASK-OUTPUT
 Provide a semantic-sort plan followed by the complete requested file content.
 ```
 
-## 5. Writing the [CONTEXT] Section
+## 5. Writing the TASK-CONTEXT Section
 
-Use [CONTEXT] for existing file contents, requirements, constraints, notes, and data samples.
+Use TASK-CONTEXT for existing file contents, requirements, constraints, notes, and data samples.
 
 * Label instructions explicitly as constraints.
 * Identify copied file contents as data rather than instructions.
-* Do not use [CONTEXT] to authorize file modifications.
+* Do not use TASK-CONTEXT to authorize file modifications.
 
-## 6. Writing the [FILES] Section
+## 6. Writing the TASK-FILES Section
 
-Use [FILES] to identify files in the task scope.
+Use TASK-FILES to identify files in the task scope.
 
 * Mark each file as `new` or `existing`.
-* State the authorized operation separately in [TASK].
+* State the authorized operation separately in TASK-DESCRIPTION.
 * Do not assume that listing an existing file authorizes modification.
 
 ## 7. Prohibited Task Patterns
