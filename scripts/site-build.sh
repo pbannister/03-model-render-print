@@ -76,7 +76,8 @@ page_title() {
         index)     echo "Model Render Print" ;;
         dashboard) echo "Dashboard" ;;
         frame)     echo "Assembly Frame" ;;
-        *)         echo "$name_base" ;;
+        *)
+            echo "$name_base" | tr '_-' '  ' | awk '{for (i = 1; i <= NF; i++) $i = toupper(substr($i, 1, 1)) substr($i, 2); print}' ;;
     esac
 }
 

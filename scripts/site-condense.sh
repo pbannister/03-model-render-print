@@ -301,5 +301,26 @@ if [ -f "$FILE_PHASES" ]; then
     fi
 fi
 
+# --- pages.txt (the page set for the homelab-injected navigation) ----------
+# The homelab renders ONE navigation bar per project page (conventions
+# section 12); site.in/pages.nav (optional) declares this project's page set,
+# one "href|Label" per line, and must contain the standard page set. The
+# homelab reads site.out/pages.txt and refuses a list that does not; without
+# the file the standard set is published.
+FILE_PAGES_NAV="$REPOSITORY_ROOT/site.in/pages.nav"
+if [ -f "$FILE_PAGES_NAV" ]; then
+    cp "$FILE_PAGES_NAV" "$DIRECTORY_OUTPUT/pages.txt"
+else
+    cat > "$DIRECTORY_OUTPUT/pages.txt" <<'HOMELAB_PAGES'
+index.html|Summary
+dashboard.html|Dashboard
+todo.html|Todo
+prompts.html|Prompts
+documents.html|Documents
+records.html|Records
+HOMELAB_PAGES
+fi
+echo "site-condense: wrote pages.txt (project page set for the homelab nav)"
+
 echo "site-condense: built todo.html, prompts.html, documents.html, records.html + full-text pages into $DIRECTORY_OUTPUT"
 exit 0

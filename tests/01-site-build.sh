@@ -40,7 +40,7 @@ grep -q '<!DOCTYPE html>' "$FILE_OUTPUT" || {
     exit 1
 }
 
-grep -q '<title>hello</title>' "$FILE_OUTPUT" || {
+grep -q '<title>Hello</title>' "$FILE_OUTPUT" || {
     echo '01-site-build: output is missing the title' >&2
     exit 1
 }
