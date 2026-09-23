@@ -315,6 +315,14 @@ def quad_triangles(point_a, point_b, point_c, point_d):
 
 GROOVE_DEPTH_MM = 0.6  # underside mark groove depth
 
+# Ring-key socket: a recess at the centre of the tile's bottom face that the
+# support ring's tab seats into (x along the tile's east-west, y north-south,
+# z into the tile).
+KEY_SOCKET_WIDTH_MM = 6.0   # along x (tile east-west)
+KEY_SOCKET_LENGTH_MM = 4.0  # along y (tile north-south)
+KEY_SOCKET_DEPTH_MM = 2.0   # recess depth into the bottom face
+KEY_SOCKET_CLEARANCE_MM = 1.0  # gap between the socket and the label box
+
 
 def boundary_ring(tile, top, latitudes, longitudes):
     """The top-surface boundary ring and its wall-edge descriptors.
@@ -654,12 +662,22 @@ def point_in_polygon_xy(point, polygon):
     return inside
 
 
+#: label grid: 6 columns per character, 7 rows per glyph.  The box is
+#: taller than the glyph block so the ring-key socket (at the footprint
+#: centre) sits clear above the text.
+LABEL_GLYPH_ROWS = 7
+LABEL_BOX_ROWS = 23
+
+
 def label_box(text, polygon):
     """The engraved-label rectangle for the bottom face, or None.
 
-    The box is centered on the footprint center (0, 0), sized so the text
-    fits the polygon; returns (x0, y0, cell) with the box at
-    [x0, x0 + 6 * len(text) * cell] x [y0, y0 + 7 * cell], or None when
+    The box is centered on the footprint center (0, 0) so the bottom-face
+    fan stays star-shaped from the origin; the glyphs occupy the lower
+    LABEL_GLYPH_ROWS rows and the upper rows stay plain, leaving the
+    ring-key socket (at the centre) clear of the text.  Returns
+    (x0, y0, cell, rows) with the box at
+    [x0, x0 + 6 * len(text) * cell] x [y0, y0 + rows * cell], or None when
     the text cannot fit legibly.
     """
     cell_max = 5.0 / 7.0
@@ -668,12 +686,13 @@ def label_box(text, polygon):
     cell = min(
         cell_max,
         0.6 * (max(xs) - min(xs)) / (6.0 * len(text)),
-        0.6 * (max(ys) - min(ys)) / 7.0,
+        0.6 * (max(ys) - min(ys)) / LABEL_BOX_ROWS,
     )
     if cell < 0.25:
         return None
+    rows = LABEL_BOX_ROWS
     box_width = 6.0 * len(text) * cell
-    box_height = 7.0 * cell
+    box_height = rows * cell
     x0 = -box_width / 2.0
     y0 = -box_height / 2.0
     checks = (
@@ -689,7 +708,7 @@ def label_box(text, polygon):
     for px, py in checks:
         if not point_in_polygon_xy((px, py), polygon):
             return None
-    return (x0, y0, cell)
+    return (x0, y0, cell, rows)
 
 
 def ray_box_intersection(point, x0, y0, x1, y1):
@@ -741,6 +760,315 @@ def snap_to_perimeter(point, perimeter):
     return best
 
 
+def _lerp3(point_a, point_b, t):
+    return (point_a[0] + (point_b[0] - point_a[0]) * t,
+            point_a[1] + (point_b[1] - point_a[1]) * t,
+            point_a[2] + (point_b[2] - point_a[2]) * t)
+
+
+
+def _segment_line_intersect(p, q, a, b):
+    """Intersection of segment p-q with the line through a-b (z interpolated)."""
+    ex = b[0] - a[0]
+    ey = b[1] - a[1]
+    dx = q[0] - p[0]
+    dy = q[1] - p[1]
+    denom = ex * dy - ey * dx
+    if abs(denom) < 1e-12:
+        return q
+    t = (ey * (p[0] - a[0]) - ex * (p[1] - a[1])) / denom
+    t = max(0.0, min(1.0, t))
+    return (p[0] + t * dx, p[1] + t * dy, p[2] + t * (q[2] - p[2]))
+
+
+
+def _cross2(o, a, b):
+    """2D cross product (a-o) x (b-o)."""
+    return ((a[0] - o[0]) * (b[1] - o[1])
+            - (a[1] - o[1]) * (b[0] - o[0]))
+
+
+
+def _signed_area2(poly):
+    return 0.5 * sum(
+        poly[i][0] * poly[(i + 1) % len(poly)][1]
+        - poly[(i + 1) % len(poly)][0] * poly[i][1]
+        for i in range(len(poly))
+    )
+
+
+
+def _point_in_tri(p, a, b, c):
+    d1 = _cross2(a, b, p)
+    d2 = _cross2(b, c, p)
+    d3 = _cross2(c, a, p)
+    has_neg = min(d1, d2, d3) < -1e-9
+    has_pos = max(d1, d2, d3) > 1e-9
+    return not (has_neg and has_pos)
+
+
+
+def _ear_clip(poly):
+    """Ear-clip a simple polygon into triangles (same winding as input)."""
+    pts = [tuple(p) for p in poly]
+    flipped = _signed_area2(pts) < 0.0
+    if flipped:
+        pts.reverse()
+    triangles = []
+    index = list(range(len(pts)))
+    guard = 0
+    while len(index) > 3 and guard < len(pts) * len(pts):
+        guard += 1
+        found = False
+        count = len(index)
+        for j in range(count):
+            i0 = index[j - 1]
+            i1 = index[j]
+            i2 = index[(j + 1) % count]
+            a = pts[i0]
+            b = pts[i1]
+            c = pts[i2]
+            if _cross2(a, b, c) <= 1e-9:
+                continue
+            blocked = False
+            for k in range(count):
+                ik = index[k]
+                if ik == i0 or ik == i1 or ik == i2:
+                    continue
+                if _point_in_tri(pts[ik], a, b, c):
+                    blocked = True
+                    break
+            if blocked:
+                continue
+            triangles.append((a, b, c))
+            index.pop(j)
+            found = True
+            break
+        if not found:
+            break
+    if len(index) == 3:
+        triangles.append((pts[index[0]], pts[index[1]], pts[index[2]]))
+    if flipped:
+        triangles = [(a, c, b) for (a, b, c) in triangles]
+    return triangles
+
+
+
+def _clip_polygon_inside(poly, rect):
+    """Sutherland-Hodgman clip of a polygon against a CCW convex rect."""
+    output = [tuple(p) for p in poly]
+    for i in range(4):
+        a = rect[i]
+        b = rect[(i + 1) % 4]
+        if len(output) < 3:
+            return []
+        next_output = []
+        count = len(output)
+        for j in range(count):
+            p = output[j]
+            q = output[(j + 1) % count]
+            p_in = _cross2(a, b, p) >= -1e-9
+            q_in = _cross2(a, b, q) >= -1e-9
+            if p_in and q_in:
+                next_output.append(q)
+            elif p_in and not q_in:
+                next_output.append(_segment_line_intersect(p, q, a, b))
+            elif not p_in and q_in:
+                next_output.append(_segment_line_intersect(p, q, a, b))
+                next_output.append(q)
+        output = next_output
+    return output
+
+
+
+def _clean_polygon(poly):
+    """Drop consecutive duplicate and collinear vertices (2D, z ignored)."""
+    points = [(point[0], point[1], 0.0) for point in poly]
+    cleaned = []
+    for point in points:
+        if cleaned and abs(point[0] - cleaned[-1][0]) < 1e-9 and abs(
+            point[1] - cleaned[-1][1]
+        ) < 1e-9:
+            continue
+        while len(cleaned) >= 2 and abs(
+            _cross2(cleaned[-2], cleaned[-1], point)
+        ) < 1e-9:
+            cleaned.pop()
+        cleaned.append(point)
+    while len(cleaned) >= 3 and abs(
+        _cross2(cleaned[-1], cleaned[0], cleaned[1])
+    ) < 1e-9:
+        cleaned.pop(0)
+    while len(cleaned) >= 3 and abs(
+        _cross2(cleaned[-2], cleaned[-1], cleaned[0])
+    ) < 1e-9:
+        cleaned.pop()
+    return cleaned
+
+
+
+def _stitch_loops(segments):
+    """Chain directed 2D segments (x, y, z) into closed vertex loops."""
+    def point_key(point):
+        return (round(point[0], 6), round(point[1], 6))
+
+    remaining = list(segments)
+    loops = []
+    while remaining:
+        first = remaining.pop(0)
+        loop = [first[0], first[1]]
+        current = first[1]
+        guard = 0
+        while guard <= len(segments):
+            guard += 1
+            key = point_key(current)
+            found = None
+            for index, (start, end) in enumerate(remaining):
+                if point_key(start) == key:
+                    found = index
+                    break
+            if found is None:
+                raise ValueError("socket boundary segments do not form closed loops")
+            start, end = remaining.pop(found)
+            loop.append(end)
+            current = end
+            if point_key(current) == point_key(loop[0]):
+                loop.pop()
+                break
+        loops.append(loop)
+    return loops
+
+
+
+def _triangulate_minus(outer, hole):
+    """Triangle (o, a, b) minus a convex hole; preserves outer edges.
+
+    The region is re-triangulated from the apex o around the hole.  The
+    triangle's edges are preserved (they are shared with the walls and the
+    neighbouring fan triangles), and the hole's boundary edges are kept so
+    the socket walls can be built from them.  Returns
+    (triangles, hole_segments): triangles tile the region at z = 0 with the
+    triangle's own winding; hole_segments are the hole's boundary segments
+    (reversed from the hole polygon) that lie on the opening rectangle.
+    """
+    o, a, b = (tuple(point) for point in outer)
+    o = (o[0], o[1], 0.0)
+    a = (a[0], a[1], 0.0)
+    b = (b[0], b[1], 0.0)
+    hole = _clean_polygon(hole)
+    if len(hole) < 3:
+        return [outer], []
+    triangle_area = abs(_signed_area2((o, a, b)))
+    if triangle_area - abs(_signed_area2(hole)) < 1e-6 * max(1.0, triangle_area):
+        # the hole covers the whole triangle: nothing remains
+        return [], []
+    outer_edges = ((o, a), (a, b), (b, o))
+    tolerance = 1e-6
+
+    def on_segment(point, start, end):
+        dx = end[0] - start[0]
+        dy = end[1] - start[1]
+        length = math.hypot(dx, dy)
+        if length < 1e-12:
+            return (
+                abs(point[0] - start[0]) < tolerance
+                and abs(point[1] - start[1]) < tolerance
+            )
+        if abs(_cross2(start, end, point)) / length > tolerance:
+            return False
+        t = ((point[0] - start[0]) * dx + (point[1] - start[1]) * dy) / (
+            length * length
+        )
+        return -tolerance <= t <= 1.0 + tolerance
+
+    def edge_key(p, q):
+        return (round(p[0], 6), round(p[1], 6), round(q[0], 6), round(q[1], 6))
+
+    # hole edges lying on a triangle edge (the shared arcs)
+    shared = set()
+    count_hole = len(hole)
+    for i in range(count_hole):
+        p = hole[i]
+        q = hole[(i + 1) % count_hole]
+        for start, end in outer_edges:
+            if on_segment(p, start, end) and on_segment(q, start, end):
+                shared.add(edge_key(p, q))
+                break
+
+    def emit(segments_out, start, end):
+        if abs(start[0] - end[0]) < 1e-9 and abs(start[1] - end[1]) < 1e-9:
+            return
+        segments_out.append((start, end))
+
+    # outer edges, split at the shared-arc endpoints
+    region_segments = []
+    for start, end in outer_edges:
+        split_points = []
+        for i in range(count_hole):
+            p = hole[i]
+            q = hole[(i + 1) % count_hole]
+            if edge_key(p, q) in shared or edge_key(q, p) in shared:
+                for point in (p, q):
+                    if on_segment(point, start, end) and not any(
+                        abs(point[0] - r[0]) < 1e-9 and abs(point[1] - r[1]) < 1e-9
+                        for r in split_points
+                    ):
+                        split_points.append(point)
+        split_points.sort(
+            key=lambda point: (point[0] - start[0]) ** 2 + (point[1] - start[1]) ** 2
+        )
+        walk = [start] + split_points + [end]
+        for i in range(len(walk) - 1):
+            p = walk[i]
+            q = walk[i + 1]
+            if edge_key(p, q) in shared or edge_key(q, p) in shared:
+                continue
+            emit(region_segments, p, q)
+
+    # hole edges, reversed, shared arcs skipped
+    hole_segments = []
+    for i in range(count_hole):
+        p = hole[i]
+        q = hole[(i + 1) % count_hole]
+        if edge_key(p, q) in shared or edge_key(q, p) in shared:
+            continue
+        emit(hole_segments, q, p)
+        emit(region_segments, q, p)
+
+    triangles = []
+    for loop in _stitch_loops(region_segments):
+        region = _clean_polygon(loop)
+        if len(region) >= 3:
+            triangles.extend(_ear_clip(region))
+    return triangles, hole_segments
+
+
+
+def socket_walls_and_floor(loop, depth):
+    """Socket walls + floor from the opening's boundary loop.
+
+    The loop is the opening's perimeter at z = 0, subdivided to match the
+    clipped bottom-face fan; the walls rise to z = depth and the floor fills
+    the opening at z = depth.
+    """
+    walls = []
+    count = len(loop)
+    for i in range(count):
+        a = loop[i]
+        b = loop[(i + 1) % count]
+        walls.extend(quad_triangles(
+            a, b, (b[0], b[1], depth), (a[0], a[1], depth)))
+    center_x = sum(p[0] for p in loop) / count
+    center_y = sum(p[1] for p in loop) / count
+    center = (center_x, center_y, depth)
+    floor = []
+    for i in range(count):
+        a = loop[i]
+        b = loop[(i + 1) % count]
+        floor.append((center, (a[0], a[1], depth), (b[0], b[1], depth)))
+    return walls, floor
+
+
 def bottom_face(polygon, text):
     """Bottom face at z = 0 with the tile id engraved, or a plain fan.
 
@@ -758,9 +1086,8 @@ def bottom_face(polygon, text):
             triangles.append(((0.0, 0.0, 0.0), point_b, point_a))
         return triangles, count, None
 
-    x0, y0, cell = box
+    x0, y0, cell, n_h = box
     n_w = 6 * len(text)
-    n_h = 7
     perimeter = perimeter_grid_points(x0, y0, cell, n_w, n_h)
     position = {(px, py): idx for idx, (px, py) in enumerate(perimeter)}
 
@@ -891,6 +1218,42 @@ def build_mesh(tile, latitudes, longitudes, elevation_mm, radius_mm, base_mm):
 
     polygon = [translate(radial_projection(point, z_bottom)) for point in boundary]
     bottom, faces_bottom, label_used = bottom_face(polygon, tile_label(tile))
+    # Cut the ring-key socket: a recess at the centre of the bottom face
+    # that the support ring's tab seats into.  Each bottom triangle that
+    # reaches the opening is re-triangulated around it and the socket's
+    # walls + floor close the recess.
+    half_width = KEY_SOCKET_WIDTH_MM / 2.0
+    half_length = KEY_SOCKET_LENGTH_MM / 2.0
+    opening = (
+        (-half_width, -half_length, 0.0),
+        (half_width, -half_length, 0.0),
+        (half_width, half_length, 0.0),
+        (-half_width, half_length, 0.0),
+    )
+    clipped = []
+    segments = []
+    for triangle in bottom:
+        inside = _clip_polygon_inside(triangle, opening)
+        if not inside:
+            clipped.append(triangle)
+            continue
+        region, hole_segments = _triangulate_minus(triangle, inside)
+        clipped.extend(region)
+        segments.extend(hole_segments)
+    for loop in _stitch_loops(segments):
+        if _signed_area2(loop) < 0.0:
+            loop.reverse()
+        walls, floor = socket_walls_and_floor(loop, KEY_SOCKET_DEPTH_MM)
+        clipped.extend(walls)
+        clipped.extend(floor)
+    bottom = clipped
+    faces_bottom = sum(
+        1
+        for point_a, point_b, point_c in bottom
+        if abs(point_a[2]) <= 1e-9
+        and abs(point_b[2]) <= 1e-9
+        and abs(point_c[2]) <= 1e-9
+    )
     triangles.extend(bottom)
 
     # top surface: rows of quads; polar caps fan to the pole

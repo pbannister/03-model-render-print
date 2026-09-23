@@ -76,6 +76,7 @@ page_title() {
         index)     echo "Model Render Print" ;;
         dashboard) echo "Dashboard" ;;
         frame)     echo "Assembly Frame" ;;
+        rings)     echo "Support Ring Lattice" ;;
         *)
             echo "$name_base" | tr '_-' '  ' | awk '{for (i = 1; i <= NF; i++) $i = toupper(substr($i, 1, 1)) substr($i, 2); print}' ;;
     esac
@@ -130,5 +131,15 @@ if [ -f "$FILE_FRAME_MODEL" ]; then
     cp "$FILE_FRAME_MODEL" "$DIRECTORY_OUTPUT/frame-assembled.obj"
     echo "site-build: copied the assembly-frame model"
 fi
+
+# Copy the generated support-lattice models (one per hemisphere) so the
+# rings page can load them.
+for hemisphere_name in north south; do
+    FILE_RINGS_MODEL="$REPOSITORY_ROOT/dataflow.out/rings/rings-$hemisphere_name.obj"
+    if [ -f "$FILE_RINGS_MODEL" ]; then
+        cp "$FILE_RINGS_MODEL" "$DIRECTORY_OUTPUT/rings-$hemisphere_name.obj"
+        echo "site-build: copied the $hemisphere_name support-lattice model"
+    fi
+done
 
 exit 0

@@ -6,6 +6,7 @@
 #		build:  sh scripts/stl-tiles-build.sh (render the STL tile set)
 #		        with --oceans-flat (flat oceans; see documents/05-stl-approach.md)
 #		frame:  sh scripts/frame-build.sh (render the assembly-frame model)
+#		rings:  sh scripts/rings-build.sh (render the support ring lattice)
 #		check:  sh scripts/stl-tiles-build.sh check (validate tiles)
 #		site:   sh scripts/site-build.sh + sh scripts/site-condense.sh
 #		        (the standard page set; see prompts/features/02-project-pages.md)
@@ -24,6 +25,9 @@ build:
 
 frame:
 	sh scripts/frame-build.sh
+
+rings:
+	sh scripts/rings-build.sh --sample-degrees 1.0
 
 check:
 	sh scripts/stl-tiles-build.sh check
@@ -49,4 +53,4 @@ deploy:
 install:
 	@echo '==== No install yet defined'
 
-.PHONY: build frame check site state clean test deploy install
+.PHONY: build frame rings check site state clean test deploy install

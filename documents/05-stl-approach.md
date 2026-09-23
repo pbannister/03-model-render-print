@@ -79,6 +79,11 @@ of latitude and longitude; each tile is an STL file that:
 - Underside mark: the tile id (e.g. `N30E045`) is engraved as recessed
   grooves on the underside (z stays 0; the grooves cut upward into the
   base). Engraved, not raised, so the tile still sits flat on the bed.
+- Key socket: a rectangular recess cut into the centre of the underside,
+  6 mm (tile east) × 4 mm (tile north) × 2 mm deep, centred on the tile
+  centre. It receives the support ring's tab (see the ring lattice below);
+  the engraved id sits in the lower rows of a taller, still centred label
+  box so the socket stays clear.
 - The tile is watertight: top quads (fan at the pole), chamfered wall
   strips, engraved bottom face (ring fan around the label grid).
 - Units: millimeters; the STL's z = 0 is the bed plane, so slicers can
@@ -112,14 +117,58 @@ of latitude and longitude; each tile is an STL file that:
   sockets and between-tile wall keys. The ribs, the sockets and the wall
   keys are **dropped** (see the decision log below).
 
-## Assembly (current: STEP export of the hemisphere)
+## Assembly (tiles only: STEP export of the hemisphere)
 
-- The support plans (interior solid + bore) are dropped. The tiles remain
-  the deliverable; a hemisphere (tiles only) can be exported as a STEP
-  file (AP214, one solid per tile at its world position) for editing in a
-  CAD tool: `python3 scripts/hemisphere_step.py` writes
+- The interior solid with the through-bore is dropped. A hemisphere (tiles
+  only) can still be exported as a STEP file (AP214, one solid per tile at
+  its world position) for editing in a CAD tool:
+  `python3 scripts/hemisphere_step.py` writes
   `dataflow.out/step/hemisphere-north.step` (sample density and hemisphere
   are parameters; the default 5-degree sampling keeps the file compact).
+
+## Assembly (current: support ring lattice)
+
+- The globe is larger than the print bed, so the internal support is
+  printed in sections and assembled inside the tiles: 3 horizontal rings +
+  12 meridian arcs + 1 cap stem = **16 pieces per hemisphere**, rendered by
+  `make rings` (`scripts/rings_build.py`) into `dataflow.out/rings/`.
+- **Horizontal rings**: one hoop per latitude band, at the band centres
+  (15° / 45° / 75° N for the north hemisphere; -15° / -45° / -75° for the
+  south). Cross-section 8 mm radial × 6 mm lateral, sitting just inside the
+  band's tiles with 0.6 mm clearance. A ring carries a **tab** at every
+  tile centre of its band (12 on the equatorial ring, 8 on the temperate
+  ring): the tab is 5.6 × 3.6 mm and reaches 1.8 mm into the tile's 6 × 4
+  × 2 mm centre socket, leaving 0.2 mm of clearance per side and at the
+  tip (the slanted tab side wall costs a few hundredths of a millimetre of
+  that). Tabs are aligned with the tile sockets because a band's tile
+  centre latitude is exactly the ring latitude, so the ring's cross-section
+  frame (radial + north) is the tile's local frame (up + north).
+- **Cap ring**: the 75°-band ring has no tabs — the polar cap tile centres
+  on the pole, not on the ring — so it is the structural ring that the
+  meridian arcs and the cap stem tie into.
+- **Meridian arcs**: 12 arcs, each running from the equator up to the cap
+  ring, 8 mm radial × 6 mm lateral, just inside the rings (0.6 mm
+  clearance). At every ring crossing the meridian carries a **tongue**
+  (5.6 × 5.6 mm, reaching 2.8 mm into the ring's 3 mm-deep, 6 mm-wide
+  **groove**). The meridians sit at 0° / 30° / ... / 330°: those longitudes
+  are the equatorial band's tile seams, so a groove never lands on a tab
+  (the equatorial tiles centre on 15° + 30°k and the temperate tiles on
+  22.5° + 45°k, both at least 7.5° away).
+- **Cap stem**: a post on the polar axis from the cap ring's plane up into
+  the polar cap tile's socket (6 × 4 mm section, 0.2 mm tip clearance),
+  plus two crossed 6 × 6 mm spoke bars in the ring's plane, on the
+  diagonals so they clear the cap ring's grooves.
+- **Bed fit**: the 15° ring is the largest piece at Ø190.8 mm, leaving
+  ~15 mm on a 220 mm bed; the meridian arcs are ~105 × 105 × 6 mm and the
+  cap stem 36 × 36 × 12 mm. `print_ready` lays every piece flat (meridian
+  planes rotated horizontal) with z = 0 on the bed.
+- **Verification**: `tests/05-rings-math.sh` is a portable (no GDAL) check
+  that the tabs seat inside the sockets in the tile's own frame, the
+  tongues reach into the grooves, no ring carries a groove and a tab at the
+  same longitude, the cap stem reaches the pole socket and its spokes land
+  in the cap ring's body, and every print-ready piece fits the bed. The
+  rendered STLs are checked separately for watertightness, positive volume
+  and z = 0.
 
 ## Row diameters
 
@@ -190,3 +239,23 @@ of latitude and longitude; each tile is an STL file that:
   its world position) is written as an AP214 STEP file
   (`scripts/hemisphere_step.py`) for editing in OnShape or FreeCAD, with
   the sample density parameterized to keep the file size practical.
+- 2026-09-23 — **Support: horizontal rings keyed into the tile centres,
+  vertical meridian arcs keyed into the rings** (the user's plan). Reason:
+  the support must print on a 220 mm bed while the assembled globe is
+  200 mm across, so it is printed in sections (16 pieces per hemisphere)
+  and assembled inside the tiles. The ring's tab goes into a 6 × 4 × 2 mm
+  socket cut into each tile's underside centre; the socket is 0.4 mm larger
+  than the tab in both lateral directions and 0.2 mm deeper, so the parts
+  drop together after printing.
+- 2026-09-23 — **Meridians sit on the equatorial tile seams (0° + 30°k).**
+  Reason: the first draft put the meridians at the equatorial tile centres
+  (15° + 30°k), where a ring would then need a groove and a tab at the same
+  longitude — geometrically impossible. At the seams, no crossing lands on
+  a tab (nearest tab 7.5° away), so every meridian keeps a key at all three
+  ring crossings.
+- 2026-09-23 — **Ring lattice verified by a portable math test**
+  (`tests/05-rings-math.sh`) plus STL checks (watertight, positive volume,
+  z = 0, ≤ 220 mm). Reason: the ring geometry is easy to get subtly wrong
+  (the first render silently built every ring at twice its radius, and the
+  cap ring at latitude 90°), so the checks assert the tile-frame fit and
+  the assembled radii numerically rather than by eye.

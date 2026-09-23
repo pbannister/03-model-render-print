@@ -35,6 +35,8 @@ approach is decided in <code>documents/05-stl-approach.md</code>.
       <code>dataflow.out/stl/</code> with <code>manifest.json</code>.</li>
   <li><code>make check</code> validates every tile (watertight, flat bottom,
       expected bounds).</li>
+  <li><code>make rings</code> renders the support lattice pieces into
+      <code>dataflow.out/rings/</code> with a per-hemisphere manifest.</li>
   <li>Load one tile into your slicer; millimeters, z = 0 is the bed plane.</li>
   <li>Use <code>--tiles</code> or <code>--region</code> to render a subset.</li>
 </ul>
@@ -47,6 +49,13 @@ approach is decided in <code>documents/05-stl-approach.md</code>.
       so each shared edge pair lies in one common plane. A hemisphere
       (tiles only) can be exported as a STEP file for CAD work:
       <code>python3 scripts/hemisphere_step.py</code>.</li>
+  <li>Because the assembled globe is wider than the 220 mm bed, the
+      internal support is printed in sections and assembled inside the
+      tiles: three horizontal rings keyed into the centre socket of every
+      tile, twelve meridian arcs keyed into the rings, and a cap stem at
+      each pole — 16 pieces per hemisphere. `make rings` renders them into
+      `dataflow.out/rings/`; see the
+      <a href="rings.html">ring lattice</a> view.</li>
   <li>Superseded: the internal hub-and-strut frame
       (<a href="frame.html">frame.html</a>, <code>make frame</code>), the
       reinforcing-rib plan, and the interior-support plan have been
