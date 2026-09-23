@@ -3,13 +3,14 @@
 
 Per hemisphere:
 
-  - **horizontal rings** at the band centres (15, 45, 75 degrees), each
-    seated against the tiles' inner (bottom) faces and keyed into the
-    centre of every tile of that band -- a tab on the ring's outer face
-    into the tile's bottom-face socket;
+  - **horizontal rings** at the band centres (15, 45, 75 degrees): flat
+    washers whose faces are parallel to the equator's, so they print flat.
+    Each is keyed into the centre of every tile of its band -- a tab on
+    the ring's top face into the tile's bottom-face socket -- and carries a
+    notch in the face its meridians arrive at;
   - **vertical (meridian) arcs**, twelve of them, from the equator to the
     cap ring, held just inside the horizontal rings and keyed into each
-    crossing with a tongue-in-groove;
+    crossing with a key that seats in that notch;
   - a **cap stem** from the 75-degree ring to the pole, keyed into the
     cap tile's socket.
 
@@ -31,12 +32,16 @@ import tempfile
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import stl_tiles_build as tiles
 
-RING_RADIAL_MM = 8.0     # ring thickness measured radially
-RING_LATERAL_MM = 6.0    # ring width along the path normal
+RING_RADIAL_MM = 8.0     # ring wall thickness, measured radially
+RING_HEIGHT_MM = 6.0     # ring height, measured parallel to the polar axis.
+                         # The ring is a flat washer: its top and bottom
+                         # faces lie in planes parallel to the equator's, so
+                         # it stands on its whole face and prints flat.
+MERIDIAN_WIDTH_MM = 6.0  # meridian arc width, across the arc
 FIT_CLEARANCE_MM = 0.4   # total slack between a key and the socket it seats in
-TAB_DEPTH_CLEARANCE_MM = 0.2   # tab tip slack inside the socket
-KEY_DEPTH_MM = 3.0       # tongue/groove radial engagement
-KEY_WINDOW_MM = 3.0      # half arc length of a tongue/groove window
+TAB_DEPTH_CLEARANCE_MM = 0.2   # key tip slack past the socket face
+KEY_DEPTH_MM = 3.0       # how deep a meridian key seats into the ring
+KEY_WINDOW_MM = 3.0      # half arc length of a key window
 MERIDIAN_COUNT = 12
 MERIDIAN_PHASE_DEG = 0.0  # meridians run along the equatorial tile seams
 BAND_CENTERS = {"N00": 15.0, "N30": 45.0, "N90": 75.0,
@@ -93,37 +98,22 @@ def east_at(longitude):
     return (-math.sin(lam), math.cos(lam), 0.0)
 
 
-def ring_profile(radius_inner, radius_outer, radius_mid, half_width,
-                 groove, tab_radius):
-    """Eight-point profile (rho, lateral) for a horizontal ring.
+def radial_at(longitude):
+    """Horizontal unit vector pointing away from the polar axis."""
+    lam = math.radians(longitude)
+    return (math.cos(lam), math.sin(lam), 0.0)
 
-    Slots 2..5 carry the feature: a groove (outer half removed, radius_mid)
-    at a meridian crossing, or a tab (outer radius extended to tab_radius)
-    at a tile centre.  When no feature applies the extra points collapse
-    onto the plain rectangle corners.
+
+def ring_profile(rho_inner, rho_outer, z_low, z_high):
+    """Four-point (radius, height) profile of the flat ring.
+
+    Radial is the distance from the polar axis and height runs along it, so
+    a rectangle here sweeps a washer whose faces are parallel to the
+    equator's: the outer and inner faces are vertical cylinders.
     """
-    lo, hi = -half_width, half_width
-    if groove is not None:
-        g_lo, g_hi = groove
-        return [
-            (radius_inner, lo), (radius_outer, lo),
-            (radius_outer, g_lo), (radius_mid, g_lo),
-            (radius_mid, g_hi), (radius_outer, g_hi),
-            (radius_outer, hi), (radius_inner, hi),
-        ]
-    if tab_radius is not None:
-        half_tab = (tiles.KEY_SOCKET_LENGTH_MM - FIT_CLEARANCE_MM) / 2.0
-        return [
-            (radius_inner, lo), (radius_outer, lo),
-            (radius_outer, -half_tab), (tab_radius, -half_tab),
-            (tab_radius, half_tab), (radius_outer, half_tab),
-            (radius_outer, hi), (radius_inner, hi),
-        ]
     return [
-        (radius_inner, lo), (radius_outer, lo),
-        (radius_outer, lo), (radius_outer, lo),
-        (radius_outer, hi), (radius_outer, hi),
-        (radius_outer, hi), (radius_inner, hi),
+        (rho_inner, z_low), (rho_outer, z_low),
+        (rho_outer, z_high), (rho_inner, z_high),
     ]
 
 
@@ -133,6 +123,28 @@ def meridian_profile(radius_inner, radius_outer, half_width):
         (radius_inner, -half_width), (radius_outer, -half_width),
         (radius_outer, half_width), (radius_inner, half_width),
     ]
+
+
+def box_triangles(center, half_a, half_b, half_c):
+    """A closed box given three half-extent vectors from its center."""
+    corners = []
+    for sign_a in (-1, 1):
+        for sign_b in (-1, 1):
+            for sign_c in (-1, 1):
+                corners.append(tuple(
+                    center[axis] + sign_a * half_a[axis]
+                    + sign_b * half_b[axis] + sign_c * half_c[axis]
+                    for axis in range(3)))
+    faces = (
+        (0, 2, 3, 1), (4, 5, 7, 6),
+        (0, 1, 5, 4), (2, 6, 7, 3),
+        (0, 4, 6, 2), (1, 3, 7, 5),
+    )
+    triangles = []
+    for (a, b, c, d) in faces:
+        triangles.append((corners[a], corners[b], corners[c]))
+        triangles.append((corners[a], corners[c], corners[d]))
+    return triangles
 
 
 def sweep(frames, profiles, closed):
@@ -194,184 +206,218 @@ def orient(triangles):
     return triangles
 
 
-def horizontal_ring(tiles_band, inner_radii, center_lat, clearance_mm):
-    """One horizontal ring piece (world coordinates)."""
-    tiles_radius = min(inner_radii[tile["id"]] for tile in tiles_band)
+def ring_values(tiles_radius, center_lat, clearance_mm):
+    """Geometry of one horizontal ring (millimetres).
+
+    The ring is a flat washer: its top and bottom faces lie in planes
+    parallel to the equator's, so it rests on its whole face and prints
+    flat.  Its outer top rim just reaches the sphere of radius
+    `tiles_radius - clearance_mm`, so the washer hugs the tiles without
+    touching them, and its keys always reach the tiles they hold.
+    """
+    phi = math.radians(center_lat)
+    sign = 1.0 if center_lat >= 0.0 else -1.0
     radius_outer = tiles_radius - clearance_mm
-    radius_inner = radius_outer - RING_RADIAL_MM
-    radius_mid = radius_inner + KEY_DEPTH_MM
-    radius_center = radius_outer - RING_RADIAL_MM / 2.0
-    half_width = RING_LATERAL_MM / 2.0
+    rho_outer = radius_outer * math.cos(phi)
+    # the outer rim reaches the clearance sphere; the washer hangs from it
+    # toward the equator, so it sits under the tiles in both hemispheres
+    z_rim = radius_outer * math.sin(phi)
+    z_inner = z_rim - sign * RING_HEIGHT_MM
+    values = {
+        "center_lat": center_lat,
+        "sign": sign,
+        "radius_outer": radius_outer,
+        "rho_inner": rho_outer - RING_RADIAL_MM,
+        "rho_outer": rho_outer,
+        "z_low": min(z_rim, z_inner),
+        "z_high": max(z_rim, z_inner),
+    }
+    # the meridians come up from the equator, so their keys seat in the
+    # ring face they meet first
+    values["key_face"] = z_inner
+    values["meridian_radius"] = meridian_key_radius(values, clearance_mm)
+    return values
 
-    # tile centres sitting on this ring: the tab angles and their reach.
-    # A band only keys through tabs when its tiles centre on the ring
-    # latitude; the polar cap centres on the pole and is held by the stem.
-    tab_by_lon = {}
-    for tile in tiles_band:
-        tile_lat, tile_lon = tiles.tile_center(tile)
-        if abs(tile_lat - center_lat) > 1.0:
-            continue
-        reach = inner_radii[tile["id"]] + tiles.KEY_SOCKET_DEPTH_MM \
-            - TAB_DEPTH_CLEARANCE_MM
-        tab_by_lon[tile_lon % 360.0] = reach
-    tab_lons = sorted(tab_by_lon)
 
-    # meridian crossings: the groove angles
-    grove_lons = [(MERIDIAN_PHASE_DEG + (360.0 / MERIDIAN_COUNT) * index)
-                  % 360.0 for index in range(MERIDIAN_COUNT)]
+def meridian_key_radius(values, clearance_mm):
+    """Outer radius a meridian arc may use where it crosses this ring.
 
-    # the frame origins trace a parallel, not a great circle
-    path_radius = radius_center * math.cos(math.radians(center_lat))
+    The arc has to clear the washer.  It either passes inside the ring's
+    bore, or passes the ring on the side its keys come from; whichever
+    lets the arc sit nearer the ring keeps the two pieces closest.
+    """
+    phi = math.radians(values["center_lat"])
+    inside = math.sqrt(max((values["rho_inner"] - clearance_mm) ** 2
+                           - KEY_WINDOW_MM ** 2, 0.0))
+    inside = inside / abs(math.cos(phi)) if abs(math.cos(phi)) > 1e-9 else 0.0
+    rise = math.sin(phi)
+    if abs(rise) < 1e-9:
+        return inside
+    side = (values["key_face"]
+            - values["sign"] * clearance_mm) / rise
+    return max(inside, side)
+
+
+def tab_triangles(tile_latitude, tile_longitude, tile_radius, values):
+    """The ring's tab into one tile's underside socket.
+
+    The tab runs along the tile's own up axis, so it fits the socket's
+    rectangular opening exactly; its root sits inside the ring's body.
+    """
+    east, north, up = tiles.local_frame(tile_latitude, tile_longitude)
+    # root the tab inside the ring's wall, far enough in that the corners of
+    # the tab's cross-section stay in the ring's body
+    z_root = values["radius_outer"] - RING_RADIAL_MM * 0.75
+    z_tip = tile_radius + tiles.KEY_SOCKET_DEPTH_MM - TAB_DEPTH_CLEARANCE_MM
+    return box_triangles(
+        _scale(up, (z_root + z_tip) / 2.0),
+        _scale(east, (tiles.KEY_SOCKET_WIDTH_MM - FIT_CLEARANCE_MM) / 2.0),
+        _scale(north, (tiles.KEY_SOCKET_LENGTH_MM - FIT_CLEARANCE_MM) / 2.0),
+        _scale(up, (z_tip - z_root) / 2.0))
+
+
+def horizontal_ring(tiles_band, inner_radii, values, clearance_mm):
+    """One horizontal ring piece (world coordinates)."""
+    rho_inner = values["rho_inner"]
+    rho_outer = values["rho_outer"]
+    z_low = values["z_low"]
+    z_high = values["z_high"]
+    sign = values["sign"]
+    center_lat = values["center_lat"]
+
+    # meridian crossings: the notches its keys seat in
+    key_lons = [(MERIDIAN_PHASE_DEG + (360.0 / MERIDIAN_COUNT) * index)
+                % 360.0 for index in range(MERIDIAN_COUNT)]
+    path_radius = (rho_inner + rho_outer) / 2.0
+    half_window = math.degrees(KEY_WINDOW_MM / path_radius)
+
     steps = 720
     frames = []
     profiles = []
     for step in range(steps):
         longitude = 360.0 * step / steps
-        radial, northward = frame_at(center_lat, longitude)
-        frames.append((ZERO, radial, northward))
-
-        def nearest(values, target):
-            best = None
-            best_d = None
-            for value in values:
-                delta = abs(((value - target + 180.0) % 360.0) - 180.0)
-                if best_d is None or delta < best_d:
-                    best_d = delta
-                    best = value
-            return best, best_d
-
-        tab_lon, tab_delta = nearest(tab_lons, longitude)
-        groove_window = math.degrees(
-            KEY_WINDOW_MM / path_radius) if path_radius > 0 else 180.0
-        tab_window = math.degrees(
-            (tiles.KEY_SOCKET_WIDTH_MM - FIT_CLEARANCE_MM) / 2.0
-            / path_radius) if path_radius > 0 else 180.0
-        groove = None
-        tab_radius = None
-        meridian_lon, meridian_delta = nearest(grove_lons, longitude)
-        if meridian_delta <= groove_window:
-            span = KEY_WINDOW_MM
-            groove = (-span, span)
-        elif tab_delta is not None and tab_delta <= tab_window:
-            tab_radius = tab_by_lon[tab_lon]
-        profiles.append(ring_profile(radius_inner, radius_outer, radius_mid,
-                                     half_width, groove, tab_radius))
-    return orient(sweep(frames, profiles, closed=True))
+        frames.append((ZERO, radial_at(longitude), (0.0, 0.0, 1.0)))
+        notched = any(abs(((key_lon - longitude + 180.0) % 360.0) - 180.0)
+                      <= half_window for key_lon in key_lons)
+        step_low, step_high = z_low, z_high
+        if notched:
+            # lift the bottom face (north) or drop the top face (south):
+            # the notch always opens toward the meridian's key
+            if sign > 0.0:
+                step_low = z_low + KEY_DEPTH_MM
+            else:
+                step_high = z_high - KEY_DEPTH_MM
+        profiles.append(ring_profile(rho_inner, rho_outer, step_low,
+                                     step_high))
+    triangles = sweep(frames, profiles, closed=True)
+    # tabs: one per tile centre in this band.  A band keys through tabs only
+    # when its tiles centre on the ring latitude; the polar cap centres on
+    # the pole and is held by the stem instead.
+    for tile in tiles_band:
+        tile_lat, tile_lon = tiles.tile_center(tile)
+        if abs(tile_lat - center_lat) > 1.0:
+            continue
+        triangles.extend(tab_triangles(tile_lat, tile_lon,
+                                       inner_radii[tile["id"]], values))
+    return orient(triangles)
 
 
 def meridian_arc(longitude, north, ring_data, clearance_mm, steps=360):
-    """One meridian arc piece from the equator to the cap ring (world)."""
-    signature = 1.0 if north else -1.0
-    # ring_data: [(center_lat, radius_inner, radius_outer, radius_center)]
-    latitudes = []
-    for step in range(steps + 1):
-        latitude = signature * 75.0 * step / steps
-        latitudes.append(latitude)
+    """One meridian arc piece from the equator to the cap ring (world).
 
-    def interpolate(latitude, index):
-        # latitudes are monotonic along the arc in both hemispheres
-        keys = sorted(((entry[0], entry[index]) for entry in ring_data),
-                      key=lambda item: item[0])
-        target = latitude
-        if target <= keys[0][0]:
+    `ring_data` is the list of ring_values dictionaries the arc crosses;
+    each crossing gets a key that seats in that ring's notch.
+    """
+    signature = 1.0 if north else -1.0
+    latitudes = [signature * 75.0 * step / steps for step in range(steps + 1)]
+
+    def interpolate(latitude):
+        keys = sorted(((entry["center_lat"], entry["meridian_radius"])
+                       for entry in ring_data), key=lambda item: item[0])
+        if latitude <= keys[0][0]:
             return keys[0][1]
-        if target >= keys[-1][0]:
+        if latitude >= keys[-1][0]:
             return keys[-1][1]
         for a, b in zip(keys, keys[1:]):
-            if a[0] <= target <= b[0]:
+            if a[0] <= latitude <= b[0]:
                 span = b[0] - a[0]
                 if span < 1e-9:
                     return a[1]
-                t = (target - a[0]) / span
+                t = (latitude - a[0]) / span
                 return a[1] + t * (b[1] - a[1])
         return keys[-1][1]
 
     frames = []
     profiles = []
     for latitude in latitudes:
-        key_inner = interpolate(latitude, 1)      # the ring's inner face
-        radius_outer = key_inner - clearance_mm
+        radius_outer = interpolate(latitude)
         radius_inner = radius_outer - RING_RADIAL_MM
-        radius_center = radius_outer - RING_RADIAL_MM / 2.0
         radial, _ = frame_at(latitude, longitude)
         frames.append((ZERO, radial, east_at(longitude)))
-        # tongue at each horizontal-ring crossing; both its reach along the
-        # meridian and its width across it sit FIT_CLEARANCE_MM inside the
-        # groove it keys into
-        tongue = False
-        for entry in ring_data:
-            crossing_lat = entry[0]
-            arc = abs(latitude - crossing_lat) * math.pi / 180.0 \
-                * radius_center
-            if arc <= KEY_WINDOW_MM - FIT_CLEARANCE_MM / 2.0:
-                tongue = True
-                break
-        if tongue:
-            radius_outer_here = key_inner + KEY_DEPTH_MM \
-                - TAB_DEPTH_CLEARANCE_MM
-            half_lateral = (RING_LATERAL_MM - FIT_CLEARANCE_MM) / 2.0
-        else:
-            radius_outer_here = radius_outer
-            half_lateral = RING_LATERAL_MM / 2.0
-        profiles.append(meridian_profile(radius_inner, radius_outer_here,
-                                         half_lateral))
-    return orient(sweep(frames, profiles, closed=False))
+        profiles.append(meridian_profile(radius_inner, radius_outer,
+                                         MERIDIAN_WIDTH_MM / 2.0))
+    triangles = sweep(frames, profiles, closed=False)
+    for entry in ring_data:
+        triangles.extend(meridian_key_triangles(longitude, entry))
+    return orient(triangles)
 
 
-def cap_stem(north, cap_inner_radius, ring_data, clearance_mm):
-    """Cap stem: a post from the 75-degree ring's centre to the pole, with
-    the tab into the cap tile's socket, plus the spokes to the ring."""
+def meridian_key_triangles(longitude, values):
+    """The box a meridian arc uses to key into one ring.
+
+    It seats in the ring's notch with FIT_CLEARANCE_MM of slack all round
+    and runs back past the ring's bore into the arc's body, so the ring and
+    the arc fuse into their printed pieces across a real overlap.
+    """
+    rho_a = values["rho_inner"] - KEY_DEPTH_MM
+    rho_b = values["rho_outer"] - FIT_CLEARANCE_MM / 2.0
+    face = values["key_face"]
+    sign = values["sign"]
+    z_a = face - sign * KEY_DEPTH_MM
+    z_b = face + sign * (KEY_DEPTH_MM - TAB_DEPTH_CLEARANCE_MM)
+    radial = radial_at(longitude)
+    center = _scale(radial, (rho_a + rho_b) / 2.0)
+    return box_triangles(
+        (center[0], center[1], (z_a + z_b) / 2.0),
+        _scale(radial, (rho_b - rho_a) / 2.0),
+        _scale(east_at(longitude),
+               KEY_WINDOW_MM - FIT_CLEARANCE_MM / 2.0),
+        (0.0, 0.0, (z_b - z_a) / 2.0))
+
+
+def cap_stem(north, cap_inner_radius, values, clearance_mm):
+    """Cap stem: a post from the pole down into the cap ring, with two
+    crossed spokes tying it to the ring.
+
+    The post tabs into the polar cap tile's socket; the spokes sit in the
+    half of the ring nearest the pole and reach into the ring's wall.  They
+    run on the diagonals so they clear the meridians' keys.
+    """
     signature = 1.0 if north else -1.0
-    cap = next(entry for entry in ring_data if abs(entry[0]) == 75.0)
-    center_radius = cap[3]
-    z_ring = center_radius * math.sin(math.radians(75.0))
-    z_pole = cap_inner_radius + tiles.KEY_SOCKET_DEPTH_MM \
-        - TAB_DEPTH_CLEARANCE_MM
-    triangles = []
-
-    def box(center, half_x, half_y, half_z, angle=0.0):
-        cos_a, sin_a = math.cos(angle), math.sin(angle)
-        corners = []
-        for sx in (-1, 1):
-            for sy in (-1, 1):
-                for sz in (-1, 1):
-                    local_x = sx * half_x
-                    local_y = sy * half_y
-                    corners.append((center[0] + local_x * cos_a
-                                    - local_y * sin_a,
-                                    center[1] + local_x * sin_a
-                                    + local_y * cos_a,
-                                    center[2] + sz * half_z))
-        # 8 corners in (x,y,z) sign order: index = 4*i + 2*j + k
-        faces = (
-            (0, 2, 3, 1), (4, 5, 7, 6),
-            (0, 1, 5, 4), (2, 6, 7, 3),
-            (0, 4, 6, 2), (1, 3, 7, 5),
-        )
-        for (a, b, c, d) in faces:
-            triangles.append((corners[a], corners[b], corners[c]))
-            triangles.append((corners[a], corners[c], corners[d]))
-
-    half = RING_LATERAL_MM / 2.0
-    # The cap tile's local frame at the pole has east along world +y and
-    # north along world -x, so the socket's 6 mm runs along y and its 4 mm
-    # along x.  Keep every key FIT_CLEARANCE_MM inside those.
-    half_east = (tiles.KEY_SOCKET_WIDTH_MM - FIT_CLEARANCE_MM) / 2.0
     half_north = (tiles.KEY_SOCKET_LENGTH_MM - FIT_CLEARANCE_MM) / 2.0
-    # stem post: from the ring plane up to the tab
-    stem_bottom = signature * z_ring
-    stem_top = signature * z_pole
-    stem_height = abs(stem_top - stem_bottom)
-    stem_center = (0.0, 0.0, (stem_bottom + stem_top) / 2.0)
-    box(stem_center, half_north, half_east, stem_height / 2.0)
-    # spokes: two bars crossing at the stem, in the ring's plane, run out
-    # into the cap ring body.  They sit on the diagonals to clear the ring's
-    # grooves, which are cut at every meridian.
-    spoke_reach = center_radius * math.cos(math.radians(75.0))
-    plane_z = signature * z_ring
+    half_east = (tiles.KEY_SOCKET_WIDTH_MM - FIT_CLEARANCE_MM) / 2.0
+    z_pole = signature * (cap_inner_radius + tiles.KEY_SOCKET_DEPTH_MM
+                          - TAB_DEPTH_CLEARANCE_MM)
+    thickness = 2.5
+    # the wall's far half is clear of the meridians' keys, which seat in
+    # the notch on the near face
+    if signature > 0.0:
+        z_spoke = values["z_high"] - TAB_DEPTH_CLEARANCE_MM - thickness / 2.0
+    else:
+        z_spoke = values["z_low"] + TAB_DEPTH_CLEARANCE_MM + thickness / 2.0
+    reach = values["rho_inner"] + 1.5
+    # the post rises from the spokes' own plane, so the printed piece
+    # stands on the cross rather than on the post's tip
+    triangles = box_triangles(
+        (0.0, 0.0, (z_spoke + z_pole) / 2.0),
+        (half_north, 0.0, 0.0), (0.0, half_east, 0.0),
+        (0.0, 0.0, abs(z_pole - z_spoke) / 2.0))
     for angle_deg in (45.0, 135.0):
-        box((0.0, 0.0, plane_z), spoke_reach, half, half,
-            math.radians(angle_deg))
+        triangles.extend(box_triangles(
+            (0.0, 0.0, z_spoke),
+            _scale(radial_at(angle_deg), reach),
+            _scale(east_at(angle_deg), MERIDIAN_WIDTH_MM / 2.0),
+            (0.0, 0.0, thickness / 2.0)))
     return orient(triangles)
 
 
@@ -380,7 +426,13 @@ def print_ready(triangles, plane_normal):
     normal = plane_normal
     length = math.sqrt(sum(value * value for value in normal))
     normal = tuple(value / length for value in normal)
-    if abs(normal[2]) < 1.0 - 1e-9:
+    if normal[2] < -1.0 + 1e-9:
+        # the piece's up axis points down (southern pieces mirror the
+        # northern ones): roll it over so its up side really is on top
+        triangles = [tuple((point[0], -point[1], -point[2])
+                           for point in triangle)
+                     for triangle in triangles]
+    elif abs(normal[2]) < 1.0 - 1e-9:
         axis = (-normal[1], normal[0], 0.0)
         axis_len = math.sqrt(sum(value * value for value in axis))
         axis = tuple(value / axis_len for value in axis)
@@ -425,6 +477,7 @@ def run(arguments):
         }
         all_tiles = tiles.plan_tiles(arguments.band_degrees)
         bands = BAND_ORDER[arguments.hemisphere]
+        hemisphere_sign = 1.0 if arguments.hemisphere == "north" else -1.0
         pieces = []
         ring_data = {}
         cap_inner = None
@@ -437,16 +490,14 @@ def run(arguments):
                     tile, grid, transform, elevation_min, elevation_max,
                     parameters, arguments.sample_degrees, arguments.radius_mm,
                     arguments.base_mm)
-            center_lat = BAND_CENTERS[band]
-            ring = horizontal_ring(band_tiles, inner, center_lat,
-                                   arguments.clearance_mm)
             tiles_radius = min(inner.values())
-            radius_outer = tiles_radius - arguments.clearance_mm
-            radius_inner = radius_outer - RING_RADIAL_MM
-            radius_center = radius_outer - RING_RADIAL_MM / 2.0
-            ring_data[band] = (center_lat, radius_inner, radius_outer,
-                               radius_center)
-            pieces.append(("ring-" + band.lower(), ring, (0.0, 0.0, 1.0)))
+            values = ring_values(tiles_radius, BAND_CENTERS[band],
+                                 arguments.clearance_mm)
+            ring = horizontal_ring(band_tiles, inner, values,
+                                   arguments.clearance_mm)
+            ring_data[band] = values
+            pieces.append(("ring-" + band.lower(), ring,
+                           (0.0, 0.0, hemisphere_sign)))
             if band in ("N90", "S90"):
                 cap_inner = tiles_radius
         order = [ring_data[band] for band in bands]
@@ -459,8 +510,8 @@ def run(arguments):
                            east_at(longitude)))
         if cap_inner is not None:
             stem = cap_stem(arguments.hemisphere == "north", cap_inner,
-                            order, arguments.clearance_mm)
-            pieces.append(("cap-stem", stem, (0.0, 0.0, 1.0)))
+                            ring_data[bands[-1]], arguments.clearance_mm)
+            pieces.append(("cap-stem", stem, (0.0, 0.0, hemisphere_sign)))
     finally:
         shutil.rmtree(working, ignore_errors=True)
 

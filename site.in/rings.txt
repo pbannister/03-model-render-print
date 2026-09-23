@@ -2,13 +2,17 @@
 <p>The internal support structure for the printable Earth, printed as 16
 separate pieces per hemisphere on a 220&nbsp;mm square bed and assembled
 inside the globe. Three <strong>horizontal rings</strong> (one per latitude
-band) carry tabs that seat in a socket cut into the centre of each tile's
-underside. Twelve <strong>meridian arcs</strong> run from the equator to the
-cap ring, each keyed into the rings it crosses by a tongue-and-groove joint.
-A <strong>cap stem</strong> posts up to the pole, tabs into the polar cap
-tile's socket, and ties to the cap ring with spokes. Both hemispheres are
-shown assembled; the faint wireframe sphere is the globe's surface
-(R&nbsp;=&nbsp;100&nbsp;mm). Drag to rotate, scroll to zoom.</p>
+band) are flat washers — their top and bottom faces lie in planes parallel
+to the equator's, so each ring stands on its whole annular face and prints
+flat. A ring carries a tab over every tile centre of its band, seating in a
+socket cut into the centre of that tile's underside. Twelve
+<strong>meridian arcs</strong> run from the equator to the cap ring; at each
+ring the arc's key seats in a notch in the ring face it arrives at, and
+seats with a fraction of a millimetre of clearance all round. A
+<strong>cap stem</strong> posts up to the pole, tabs into the polar cap
+tile's socket, and ties to the cap ring with two crossed spokes. Both
+hemispheres are shown assembled; the faint wireframe sphere is the globe's
+surface (R&nbsp;=&nbsp;100&nbsp;mm). Drag to rotate, scroll to zoom.</p>
 <div id="rings-legend" class="rings-legend"></div>
 <div id="rings-viewport" class="rings-viewport">
   <canvas id="rings-canvas"></canvas>

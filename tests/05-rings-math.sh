@@ -2,8 +2,8 @@
 #
 # Test for the support ring-lattice math (scripts/rings_build.py).
 # Portable tier: pure Python, no GDAL, numpy, or datasets required.
-# Exercises the ring profiles, the tile-socket tabs, the meridian
-# tongues/grooves, the cap stem, and the print-ready orientation.
+# Exercises the flat rings, the tile-socket tabs, the meridian keys, the cap
+# stem, and the print-ready orientation.
 set -eu
 
 REPOSITORY_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
@@ -22,6 +22,9 @@ INNER_RADIUS = {"N00": 98.15, "N30": 96.67, "N90": 90.89}
 CLEARANCE = 0.6
 CAP_DEPTH = 2.0
 FIT = build.FIT_CLEARANCE_MM
+KEY_LONS = [build.MERIDIAN_PHASE_DEG
+            + (360.0 / build.MERIDIAN_COUNT) * index
+            for index in range(build.MERIDIAN_COUNT)]
 
 
 def band_tiles(name, lat_min, lat_max, count):
@@ -41,75 +44,69 @@ temperate = band_tiles("N30", 30.0, 60.0, 8)
 cap = {"id": "tile-N90", "is_cap": True, "lat_min": 60.0,
        "lat_max": 90.0, "lon_min": 0.0, "lon_max": 360.0}
 
-radii = {
-    "equatorial": {tile["id"]: INNER_RADIUS["N00"] for tile in equatorial},
-    "temperate": {tile["id"]: INNER_RADIUS["N30"] for tile in temperate},
-    "cap": {"tile-N90": INNER_RADIUS["N90"]},
-}
+bands = (
+    ("equatorial", equatorial, 15.0, INNER_RADIUS["N00"]),
+    ("temperate", temperate, 45.0, INNER_RADIUS["N30"]),
+    ("cap", [cap], 75.0, INNER_RADIUS["N90"]),
+)
 
-ring_15 = build.horizontal_ring(equatorial, radii["equatorial"], 15.0,
-                                CLEARANCE)
-ring_45 = build.horizontal_ring(temperate, radii["temperate"], 45.0,
-                                CLEARANCE)
-ring_75 = build.horizontal_ring([cap], radii["cap"], 75.0, CLEARANCE)
-
-# --- every piece is a closed, positively oriented solid ------------------
-def radius(point):
-    return math.sqrt(sum(value * value for value in point))
+values = {}
+rings = {}
+for name, tiles_band, latitude, inner in bands:
+    radii = {tile["id"]: inner for tile in tiles_band}
+    value = build.ring_values(inner, latitude, CLEARANCE)
+    values[name] = value
+    rings[name] = build.horizontal_ring(tiles_band, radii, value, CLEARANCE)
 
 
-rings = {"15": (ring_15, INNER_RADIUS["N00"]),
-         "45": (ring_45, INNER_RADIUS["N30"]),
-         "75": (ring_75, INNER_RADIUS["N90"])}
-for name, (ring, inner) in rings.items():
+def triangle_normal(triangle):
+    point_a, point_b, point_c = triangle
+    u = [point_b[i] - point_a[i] for i in range(3)]
+    v = [point_c[i] - point_a[i] for i in range(3)]
+    normal = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2],
+              u[0] * v[1] - u[1] * v[0]]
+    length = math.sqrt(sum(value * value for value in normal))
+    return [value / length for value in normal] if length > 1e-12 else normal
+
+
+# --- a ring is a flat washer: its faces are parallel to the equator ------
+for name, tiles_band, latitude, inner in bands:
+    value = values[name]
+    ring = rings[name]
     assert len(ring) > 1000, (name, len(ring))
     assert tiles.signed_volume(ring) > 0.0, name
-    distances = [radius(point) for triangle in ring for point in triangle]
-    outer = inner - CLEARANCE
-    low = outer - build.RING_RADIAL_MM
-    # the body sits between the inner and outer faces, plus the key depth
-    assert low - 0.01 <= min(distances), (name, min(distances), low)
-    assert max(distances) <= outer + build.KEY_DEPTH_MM + 0.01, \
-        (name, max(distances))
-
-# --- 12 meridian arcs key into every ring -------------------------------
-order = [(15.0, INNER_RADIUS["N00"] - CLEARANCE - build.RING_RADIAL_MM,
-          INNER_RADIUS["N00"] - CLEARANCE,
-          INNER_RADIUS["N00"] - CLEARANCE - build.RING_RADIAL_MM / 2.0),
-         (45.0, INNER_RADIUS["N30"] - CLEARANCE - build.RING_RADIAL_MM,
-          INNER_RADIUS["N30"] - CLEARANCE,
-          INNER_RADIUS["N30"] - CLEARANCE - build.RING_RADIAL_MM / 2.0),
-         (75.0, INNER_RADIUS["N90"] - CLEARANCE - build.RING_RADIAL_MM,
-          INNER_RADIUS["N90"] - CLEARANCE,
-          INNER_RADIUS["N90"] - CLEARANCE - build.RING_RADIAL_MM / 2.0)]
-
-longitudes = [build.MERIDIAN_PHASE_DEG
-              + (360.0 / build.MERIDIAN_COUNT) * index
-              for index in range(build.MERIDIAN_COUNT)]
-arcs = []
-for longitude in longitudes:
-    arc = build.meridian_arc(longitude, True, order, CLEARANCE)
-    assert len(arc) > 500, (longitude, len(arc))
-    assert tiles.signed_volume(arc) > 0.0, longitude
-    arcs.append((longitude, arc))
-
-# a tongue reaches KEY_DEPTH - TAB_DEPTH_CLEARANCE past the ring's inner face
-tongue_tips = [entry[1] + build.KEY_DEPTH_MM
-               - build.TAB_DEPTH_CLEARANCE_MM for entry in order]
-for longitude, arc in arcs:
-    distances = [radius(point) for triangle in arc for point in triangle]
-    assert abs(max(distances) - max(tongue_tips)) < 0.05, \
-        (longitude, max(distances))
-    # the body stays inside the innermost ring face it spans
-    assert min(distances) > order[2][1] - CLEARANCE \
-        - build.RING_RADIAL_MM - 0.01, (longitude, min(distances))
-
-# --- the south hemisphere mirrors the north -----------------------------
-mirrored = [(-entry[0], entry[1], entry[2], entry[3]) for entry in order]
-arc_south = build.meridian_arc(0.0, False, mirrored, CLEARANCE)
-arc_north = build.meridian_arc(0.0, True, order, CLEARANCE)
+    assert value["rho_inner"] > 0.0, name
+    # the outer rim reaches the clearance sphere
+    rim = (value["rho_outer"] * math.cos(math.radians(latitude))
+           + value["radius_outer"] * math.sin(math.radians(latitude)) ** 2)
+    assert abs(rim - value["radius_outer"]) < 1e-9, (name, rim)
+    # every horizontal face lies at the ring's bottom/top or the notch roof
+    heights = {round(value["z_low"], 6), round(value["z_high"], 6),
+               round(value["key_face"] + value["sign"] * build.KEY_DEPTH_MM,
+                     6)}
+    for triangle in ring:
+        normal = triangle_normal(triangle)
+        if abs(abs(normal[2]) - 1.0) > 1e-9:
+            continue
+        for point in triangle:
+            assert round(point[2], 6) in heights, (name, point, heights)
+    # the ring stands on a face, not an edge: its bottom plane carries a
+    # whole annulus of vertices, spanning the wall
+    bottom = [point for triangle in ring for point in triangle
+              if abs(point[2] - value["z_low"]) < 1e-9]
+    assert len(bottom) > 200, (name, len(bottom))
+    radii = [math.hypot(point[0], point[1]) for point in bottom]
+    assert min(radii) < value["rho_inner"] + 0.05, (name, min(radii))
+    assert max(radii) > value["rho_outer"] - 0.05, (name, max(radii))
+    # only the tabs rise above the ring's top face
+    top = max(point[2] for triangle in ring for point in triangle)
+    if name == "cap":
+        assert abs(top - value["z_high"]) < 1e-9, (name, top)
+    else:
+        assert top > value["z_high"] + 1.0, (name, top)
 
 
+# --- the south hemisphere mirrors the north ------------------------------
 def vertex_set(triangles, flip):
     # compare geometry, not triangulation: a mirrored piece may split its
     # quads along the other diagonal, and collapsed profile slots leave a
@@ -123,36 +120,102 @@ def vertex_set(triangles, flip):
     return sorted(points)
 
 
-assert vertex_set(arc_north, True) == vertex_set(arc_south, False), \
+for name, tiles_band, latitude, inner in bands:
+    south_latitude = -latitude
+    if name == "cap":
+        south_band = [{"id": "tile-S90", "is_cap": True, "lat_min": -90.0,
+                       "lat_max": -60.0, "lon_min": 0.0, "lon_max": 360.0}]
+    else:
+        south_name = {"equatorial": "S30", "temperate": "S60"}[name]
+        south_band = band_tiles(south_name, south_latitude - 15.0,
+                                south_latitude + 15.0, len(tiles_band))
+    south_value = build.ring_values(inner, south_latitude, CLEARANCE)
+    south_radii = {tile["id"]: inner for tile in south_band}
+    south_ring = build.horizontal_ring(south_band, south_radii, south_value,
+                                       CLEARANCE)
+    assert vertex_set(rings[name], True) == vertex_set(south_ring, False), \
+        "the south %s ring must mirror the north" % name
+    assert abs(south_value["meridian_radius"]
+               - values[name]["meridian_radius"]) < 1e-9, name
+
+order = [values[name] for name, _, _, _ in bands]
+arc = build.meridian_arc(0.0, True, order, CLEARANCE)
+south_order = [build.ring_values(inner, -latitude, CLEARANCE)
+               for _, _, latitude, inner in bands]
+south_arc = build.meridian_arc(0.0, False, south_order, CLEARANCE)
+assert vertex_set(arc, True) == vertex_set(south_arc, False), \
     "the south meridian must mirror the north"
-ring_south = build.horizontal_ring(
-    band_tiles("S30", -30.0, 0.0, 12),
-    {"tile-S30E%03d" % int(round(index * 30.0)): INNER_RADIUS["N00"]
-     for index in range(12)}, -15.0, CLEARANCE)
-assert vertex_set(ring_15, True) == vertex_set(ring_south, False), \
-    "the south ring must mirror the north"
-
-# --- no ring carries a groove and a tab at the same longitude -----------
-def angular_gap(first, second):
-    return abs(((first - second + 180.0) % 360.0) - 180.0)
 
 
-for name, (ring, inner) in rings.items():
-    center_lat = build.BAND_CENTERS[{"15": "N00", "45": "N30",
-                                     "75": "N90"}[name]]
-    path = (inner - CLEARANCE - build.RING_RADIAL_MM / 2.0) \
-        * math.cos(math.radians(center_lat))
-    groove_window = math.degrees(build.KEY_WINDOW_MM / path)
-    tab_window = math.degrees((tiles.KEY_SOCKET_WIDTH_MM - FIT) / 2.0 / path)
-    for meridian in longitudes:
-        for tile in (equatorial if name == "15" else
-                     temperate if name == "45" else [cap]):
-            latitude, longitude = tiles.tile_center(tile)
-            if abs(latitude - center_lat) > 1.0:
-                continue
-            gap = angular_gap(meridian, longitude)
-            assert gap > tab_window, (name, meridian, longitude, gap)
-            assert gap > groove_window - tab_window, (name, gap)
+# --- a meridian clears every ring it crosses ----------------------------
+def inside_ring_solid(point, value):
+    """Is the point inside the ring's material (the washer minus notches)?"""
+    radius = math.hypot(point[0], point[1])
+    if not value["rho_inner"] < radius < value["rho_outer"]:
+        return False
+    if not value["z_low"] < point[2] < value["z_high"]:
+        return False
+    longitude = math.degrees(math.atan2(point[1], point[0])) % 360.0
+    for key in KEY_LONS:
+        gap = abs(((key - longitude + 180.0) % 360.0) - 180.0)
+        if gap * math.pi / 180.0 * value["rho_inner"] > build.KEY_WINDOW_MM:
+            continue
+        depth = value["key_face"] + value["sign"] * build.KEY_DEPTH_MM
+        if min(value["key_face"], depth) <= point[2] \
+                <= max(value["key_face"], depth):
+            return False
+    return True
+
+
+samples = []
+for point_a, point_b, point_c in arc:
+    for (u, v) in ((1 / 3, 1 / 3), (0.5, 0.0), (0.0, 0.5), (0.5, 0.25),
+                   (0.25, 0.5), (0.2, 0.2), (0.6, 0.2), (0.2, 0.6)):
+        samples.append(tuple(point_a[i] * u + point_b[i] * v
+                             + point_c[i] * (1 - u - v) for i in range(3)))
+for name, _, latitude, inner in bands:
+    intruders = [point for point in samples
+                 if inside_ring_solid(point, values[name])]
+    assert not intruders, (name, intruders[0])
+
+
+# --- every meridian key seats in its ring's notch ------------------------
+def arc_radius_at(latitude):
+    keys = sorted((value["center_lat"], value["meridian_radius"])
+                  for value in order)
+    if latitude <= keys[0][0]:
+        return keys[0][1]
+    if latitude >= keys[-1][0]:
+        return keys[-1][1]
+    for a, b in zip(keys, keys[1:]):
+        if a[0] <= latitude <= b[0]:
+            t = (latitude - a[0]) / (b[0] - a[0])
+            return a[1] + t * (b[1] - a[1])
+    return keys[-1][1]
+
+
+for name, _, latitude, inner in bands:
+    value = values[name]
+    key = build.meridian_key_triangles(0.0, value)
+    assert len(key) == 12, (name, len(key))
+    depth = value["key_face"] + value["sign"] * build.KEY_DEPTH_MM
+    for triangle in key:
+        for point in triangle:
+            radius = math.hypot(point[0], point[1])
+            # it seats in the notch and never passes its roof into the ring
+            assert radius <= value["rho_outer"] + 1e-6, (name, radius)
+            if radius > value["rho_inner"]:
+                assert (point[2] - depth) * value["sign"] <= 1e-6, \
+                    (name, point[2], depth)
+    # the key's far end reaches into the arc's body, so the two fuse
+    innermost = min((point for triangle in key for point in triangle),
+                    key=lambda point: math.hypot(point[0], point[1]))
+    radius = math.sqrt(sum(value * value for value in innermost))
+    latitude_here = math.degrees(math.asin(innermost[2] / radius))
+    outer = arc_radius_at(latitude_here)
+    assert outer - build.RING_RADIAL_MM <= radius <= outer, \
+        (name, radius, outer)
+
 
 # --- the tabs seat inside the tile sockets ------------------------------
 def to_local(point, tile_latitude, tile_longitude):
@@ -161,39 +224,32 @@ def to_local(point, tile_latitude, tile_longitude):
             tiles.dot(point, up))
 
 
-for tiles_band, ring, inner, name in ((equatorial, ring_15,
-                                       INNER_RADIUS["N00"], "N00"),
-                                      (temperate, ring_45,
-                                       INNER_RADIUS["N30"], "N30")):
+for name, tiles_band, latitude, inner in bands:
+    ring = rings[name]
     half_width = (tiles.KEY_SOCKET_WIDTH_MM - FIT) / 2.0
     half_length = (tiles.KEY_SOCKET_LENGTH_MM - FIT) / 2.0
     depth = tiles.KEY_SOCKET_DEPTH_MM - build.TAB_DEPTH_CLEARANCE_MM
     for tile in tiles_band:
-        latitude, longitude = tiles.tile_center(tile)
-        bottom = inner
+        tile_latitude, tile_longitude = tiles.tile_center(tile)
+        if abs(tile_latitude - values[name]["center_lat"]) > 1.0:
+            continue
         seated = []
         for triangle in ring:
             for point in triangle:
-                local = to_local(point, latitude, longitude)
-                if local[2] > bottom + 0.5:
+                local = to_local(point, tile_latitude, tile_longitude)
+                if local[2] > inner + 0.5:
                     seated.append(local)
-        assert seated, (name, longitude)
-        worst_x = worst_y = 0.0
+        assert seated, (name, tile_longitude)
         for local in seated:
-            # the tab's slanted side wall adds a few hundredths of a
-            # millimetre at the swept edge; the fit clearance must survive it
-            assert abs(local[0]) <= half_width + 0.05, (name, local)
-            assert abs(local[1]) <= half_length + 0.05, (name, local)
-            assert local[2] <= bottom + depth + 1e-6, (name, local)
-            worst_x = max(worst_x, abs(local[0]))
-            worst_y = max(worst_y, abs(local[1]))
-        assert FIT / 2.0 - max(worst_x - half_width, worst_y - half_length) \
-            > 0.1, (name, worst_x, worst_y)
-        assert max(local[2] for local in seated) > bottom + depth - 1e-3, \
-            (name, longitude)
+            # the tab's cross-section is the socket's minus clearance
+            assert abs(local[0]) <= half_width + 1e-6, (name, local)
+            assert abs(local[1]) <= half_length + 1e-6, (name, local)
+            assert local[2] <= inner + depth + 1e-6, (name, local)
+        assert max(local[2] for local in seated) > inner + depth - 1e-3, \
+            (name, tile_longitude)
 
 # --- the cap stem reaches the pole socket and ties to the cap ring ------
-stem = build.cap_stem(True, INNER_RADIUS["N90"], order, CLEARANCE)
+stem = build.cap_stem(True, INNER_RADIUS["N90"], values["cap"], CLEARANCE)
 assert len(stem) > 20, len(stem)
 assert tiles.signed_volume(stem) > 0.0
 highest = max(point[2] for triangle in stem for point in triangle)
@@ -207,26 +263,27 @@ for point in corners:
     # the cap tile's frame at the pole: east along +y, north along -x
     assert abs(point[0]) <= half_north + 1e-6, point
     assert abs(point[1]) <= half_east + 1e-6, point
-# the spokes reach into the cap ring body: every spoke point lies in the
-# ring's radial band, and reaches past the ring's inner face
-band_low = order[2][1] - 0.01
-band_high = order[2][2] + 0.01
+# the spokes sit in the ring's wall, clear of the meridian keys
+cap_value = values["cap"]
 spokes = [point for triangle in stem for point in triangle
-          if math.hypot(point[0], point[1]) > 4.0]
+          if math.hypot(point[0], point[1]) > cap_value["rho_inner"]
+          and cap_value["z_low"] <= point[2] <= cap_value["z_high"]]
 assert spokes, "the stem has no spokes"
 for point in spokes:
-    assert band_low <= radius(point) <= band_high, point
-inner_cylinder = order[2][1] * math.cos(math.radians(75.0))
-assert max(math.hypot(point[0], point[1]) for point in spokes) \
-    > inner_cylinder + 0.5
+    assert math.hypot(point[0], point[1]) <= cap_value["rho_outer"] + 1e-6, \
+        point
+assert min(point[2] for point in spokes) \
+    > cap_value["key_face"] + build.KEY_DEPTH_MM, "spokes clash with a key"
 
 # --- print-ready pieces sit on the bed and fit a 220 mm square ----------
-pieces = [("ring-15", ring_15, (0.0, 0.0, 1.0)),
-          ("ring-45", ring_45, (0.0, 0.0, 1.0)),
-          ("ring-75", ring_75, (0.0, 0.0, 1.0)),
-          ("cap-stem", stem, (0.0, 0.0, 1.0))]
-pieces += [("meridian-%02d" % (index + 1), arc, build.east_at(longitude))
-           for index, (longitude, arc) in enumerate(arcs)]
+pieces = [(name, rings[name], (0.0, 0.0, 1.0))
+          for name, _, _, _ in bands]
+pieces.append(("cap-stem", stem, (0.0, 0.0, 1.0)))
+for index in range(build.MERIDIAN_COUNT):
+    longitude = KEY_LONS[index]
+    meridian = build.meridian_arc(longitude, True, order, CLEARANCE)
+    pieces.append(("meridian-%02d" % (index + 1), meridian,
+                   build.east_at(longitude)))
 for name, piece, normal in pieces:
     ready = build.print_ready(piece, normal)
     assert len(ready) == len(piece), (name, len(ready), len(piece))
@@ -238,6 +295,43 @@ for name, piece, normal in pieces:
     span_y = max(point[1] for triangle in ready for point in triangle) \
         - min(point[1] for triangle in ready for point in triangle)
     assert span_x <= 220.0 and span_y <= 220.0, (name, span_x, span_y)
+
+# --- southern pieces print the same way up ------------------------------
+# a flipped piece must stand on its washer face (or its spoke cross), never
+# on the tips of its keys
+for name, tiles_band, latitude, inner in bands:
+    south_latitude = -latitude
+    if name == "cap":
+        south_band = [{"id": "tile-S90", "is_cap": True, "lat_min": -90.0,
+                       "lat_max": -60.0, "lon_min": 0.0, "lon_max": 360.0}]
+    else:
+        south_name = {"equatorial": "S30", "temperate": "S60"}[name]
+        south_band = band_tiles(south_name, south_latitude - 15.0,
+                                south_latitude + 15.0, len(tiles_band))
+    south_value = build.ring_values(inner, south_latitude, CLEARANCE)
+    south_radii = {tile["id"]: inner for tile in south_band}
+    south_ring = build.horizontal_ring(south_band, south_radii, south_value,
+                                       CLEARANCE)
+    ready = build.print_ready(south_ring, (0.0, 0.0, -1.0))
+    assert tiles.signed_volume(ready) > 0.0, name
+    heights = [point[2] for triangle in ready for point in triangle]
+    assert abs(min(heights)) < 1e-9, (name, min(heights))
+    contact = [point for triangle in ready for point in triangle
+               if abs(point[2]) < 1e-9]
+    contact_radii = [math.hypot(point[0], point[1]) for point in contact]
+    assert min(contact_radii) < south_value["rho_inner"] + 0.05, name
+    assert max(contact_radii) > south_value["rho_outer"] - 0.05, name
+
+south_stem = build.cap_stem(False, INNER_RADIUS["N90"], south_order[-1],
+                            CLEARANCE)
+ready = build.print_ready(south_stem, (0.0, 0.0, -1.0))
+heights = [point[2] for triangle in ready for point in triangle]
+assert abs(min(heights)) < 1e-9, min(heights)
+contact = [point for triangle in ready for point in triangle
+           if abs(point[2]) < 1e-9]
+contact_radii = [math.hypot(point[0], point[1]) for point in contact]
+assert max(contact_radii) > south_order[-1]["rho_inner"], \
+    "the south stem must stand on its spokes"
 
 print("05-rings-math: ok")
 PY

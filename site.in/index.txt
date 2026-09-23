@@ -51,10 +51,10 @@ approach is decided in <code>documents/05-stl-approach.md</code>.
       <code>python3 scripts/hemisphere_step.py</code>.</li>
   <li>Because the assembled globe is wider than the 220 mm bed, the
       internal support is printed in sections and assembled inside the
-      tiles: three horizontal rings keyed into the centre socket of every
-      tile, twelve meridian arcs keyed into the rings, and a cap stem at
-      each pole — 16 pieces per hemisphere. `make rings` renders them into
-      `dataflow.out/rings/`; see the
+      tiles: three flat horizontal rings keyed into the centre socket of
+      every tile, twelve meridian arcs keyed into the rings, and a cap stem
+      at each pole — 16 pieces per hemisphere. `make rings` renders them
+      into `dataflow.out/rings/`; see the
       <a href="rings.html">ring lattice</a> view.</li>
   <li>Superseded: the internal hub-and-strut frame
       (<a href="frame.html">frame.html</a>, <code>make frame</code>), the

@@ -132,43 +132,54 @@ of latitude and longitude; each tile is an STL file that:
   printed in sections and assembled inside the tiles: 3 horizontal rings +
   12 meridian arcs + 1 cap stem = **16 pieces per hemisphere**, rendered by
   `make rings` (`scripts/rings_build.py`) into `dataflow.out/rings/`.
-- **Horizontal rings**: one hoop per latitude band, at the band centres
-  (15° / 45° / 75° N for the north hemisphere; -15° / -45° / -75° for the
-  south). Cross-section 8 mm radial × 6 mm lateral, sitting just inside the
-  band's tiles with 0.6 mm clearance. A ring carries a **tab** at every
-  tile centre of its band (12 on the equatorial ring, 8 on the temperate
-  ring): the tab is 5.6 × 3.6 mm and reaches 1.8 mm into the tile's 6 × 4
-  × 2 mm centre socket, leaving 0.2 mm of clearance per side and at the
-  tip (the slanted tab side wall costs a few hundredths of a millimetre of
-  that). Tabs are aligned with the tile sockets because a band's tile
-  centre latitude is exactly the ring latitude, so the ring's cross-section
-  frame (radial + north) is the tile's local frame (up + north).
+- **Horizontal rings**: one flat washer per latitude band, at the band
+  centres (15° / 45° / 75° N; -15° / -45° / -75° for the south). The washer
+  is 8 mm thick radially and 6 mm tall, and its top and bottom faces lie in
+  **planes parallel to the equator's** — the outer and inner faces are
+  vertical cylinders — so it stands on its whole annular face and prints
+  flat. Its outer top rim just reaches the sphere of radius
+  `tiles_radius - 0.6 mm`, so it hugs the tiles without touching them, and
+  the washer hangs from that rim toward the equator. A ring carries a
+  **tab** over every tile centre of its band (12 on the equatorial ring, 8
+  on the temperate ring): the tab is 5.6 × 3.6 mm and runs along the
+  *tile's* up axis into the tile's 6 × 4 × 2 mm centre socket, 1.8 mm deep
+  and 0.2 mm clear per side. Building each tab in the tile's own frame is
+  what lets a flat ring key a tilted tile; a tab's root sits inside the
+  ring wall, so the two fuse into one printed piece.
 - **Cap ring**: the 75°-band ring has no tabs — the polar cap tile centres
   on the pole, not on the ring — so it is the structural ring that the
   meridian arcs and the cap stem tie into.
 - **Meridian arcs**: 12 arcs, each running from the equator up to the cap
-  ring, 8 mm radial × 6 mm lateral, just inside the rings (0.6 mm
-  clearance). At every ring crossing the meridian carries a **tongue**
-  (5.6 × 5.6 mm, reaching 2.8 mm into the ring's 3 mm-deep, 6 mm-wide
-  **groove**). The meridians sit at 0° / 30° / ... / 330°: those longitudes
-  are the equatorial band's tile seams, so a groove never lands on a tab
-  (the equatorial tiles centre on 15° + 30°k and the temperate tiles on
-  22.5° + 45°k, both at least 7.5° away).
-- **Cap stem**: a post on the polar axis from the cap ring's plane up into
-  the polar cap tile's socket (6 × 4 mm section, 0.2 mm tip clearance),
-  plus two crossed 6 × 6 mm spoke bars in the ring's plane, on the
-  diagonals so they clear the cap ring's grooves.
-- **Bed fit**: the 15° ring is the largest piece at Ø190.8 mm, leaving
+  ring, 8 mm thick × 6 mm wide. Each arc's radius is interpolated so that
+  it either passes inside a ring's bore or passes it on the key side,
+  whichever keeps it nearer the ring, always with 0.6 mm of clearance. At
+  every crossing the arc carries a **key** — a 5.6 mm wide box that seats
+  in a 6 mm wide notch in the ring face the arc arrives at, 2.8 mm deep
+  with 0.2 mm of slack, and runs back past the ring's bore into the arc's
+  body so the two fuse. The meridians sit at 0° / 30° / ... / 330°: those
+  longitudes are the equatorial band's tile seams, so a notch never lands
+  on a tab (the equatorial tiles centre on 15° + 30°k and the temperate
+  tiles on 22.5° + 45°k, both at least 7.5° away).
+- **Cap stem**: a 6 × 4 mm post on the polar axis from the cap ring's
+  spokes up into the polar cap tile's socket (0.2 mm tip clearance), plus
+  two crossed spoke bars that run from the axis into the cap ring's wall.
+  The spokes sit on the diagonals, so they clear the meridians' keys, and
+  in the half of the wall the keys do not use. The post rises from the
+  spokes' plane, so the piece stands on its cross when printed.
+- **Bed fit**: the 15° ring is the largest piece at Ø189.6 mm, leaving
   ~15 mm on a 220 mm bed; the meridian arcs are ~105 × 105 × 6 mm and the
-  cap stem 36 × 36 × 12 mm. `print_ready` lays every piece flat (meridian
-  planes rotated horizontal) with z = 0 on the bed.
+  cap stem ~28 × 28 × 8 mm. `print_ready` lays every piece flat (meridian
+  planes rotated horizontal, southern pieces rolled over so their up side
+  is up) with z = 0 on the bed.
 - **Verification**: `tests/05-rings-math.sh` is a portable (no GDAL) check
-  that the tabs seat inside the sockets in the tile's own frame, the
-  tongues reach into the grooves, no ring carries a groove and a tab at the
-  same longitude, the cap stem reaches the pole socket and its spokes land
-  in the cap ring's body, and every print-ready piece fits the bed. The
-  rendered STLs are checked separately for watertightness, positive volume
-  and z = 0.
+  that each ring's horizontal faces lie only at its bottom, its top or the
+  notch roof, that each ring stands on a whole annulus, that the tabs seat
+  inside the sockets in the tile's own frame, that the meridians never
+  enter a ring's material but their keys reach into their bodies, that the
+  south mirrors the north, that the cap stem reaches the pole socket and
+  its spokes land in the cap ring's wall, and that every print-ready piece
+  stands flat and fits the bed. The rendered STLs are checked separately
+  for watertightness, positive volume and z = 0.
 
 ## Row diameters
 
@@ -253,6 +264,17 @@ of latitude and longitude; each tile is an STL file that:
   longitude — geometrically impossible. At the seams, no crossing lands on
   a tab (nearest tab 7.5° away), so every meridian keeps a key at all three
   ring crossings.
+- 2026-09-23 — **The rings are flat washers, not sphere-hugging bands.**
+  Reason: the user asked for the rings' sides to be parallel to the
+  equator's plane so they print flat. A band tilted to follow the sphere
+  stands on a circular edge (the 75-degree band nearly on edge); a washer
+  whose faces are horizontal stands on its whole annulus. The cost is that
+  a swept profile can no longer carry the tiles' tabs — the tiles are
+  tilted relative to the ring — so each tab is now built in the *tile's*
+  own frame as a box rooted in the ring wall, and the meridians key into a
+  notch in the ring face they arrive at instead of a tongue-in-groove.
+  Southern rings and the southern stem are rolled over by `print_ready`,
+  so both hemispheres print the same way up.
 - 2026-09-23 — **Ring lattice verified by a portable math test**
   (`tests/05-rings-math.sh`) plus STL checks (watertight, positive volume,
   z = 0, ≤ 220 mm). Reason: the ring geometry is easy to get subtly wrong
