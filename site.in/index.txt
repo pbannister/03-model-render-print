@@ -46,9 +46,10 @@ approach is decided in <code>documents/05-stl-approach.md</code>.
 <ul>
   <li>Tiles are printed flat and assembled over the globe's curvature;
       adjacent tiles mate along chamfered walls through the globe center,
-      so each shared edge pair lies in one common plane. A hemisphere
-      (tiles only) can be exported as a STEP file for CAD work:
-      <code>python3 scripts/hemisphere_step.py</code>.</li>
+      so each shared edge pair lies in one common plane. <code>make
+      step</code> exports the whole tile set as STEP in assembled
+      orientation — one placed, named solid per tile, plus a file per tile
+      — for import and editing in OnShape.</li>
   <li>Because the assembled globe is wider than the 220 mm bed, the
       internal support is printed in sections and assembled inside the
       tiles: three flat horizontal rings keyed into the centre socket of

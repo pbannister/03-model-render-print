@@ -117,14 +117,23 @@ of latitude and longitude; each tile is an STL file that:
   sockets and between-tile wall keys. The ribs, the sockets and the wall
   keys are **dropped** (see the decision log below).
 
-## Assembly (tiles only: STEP export of the hemisphere)
+## Assembly (tiles only: STEP export for CAD)
 
-- The interior solid with the through-bore is dropped. A hemisphere (tiles
-  only) can still be exported as a STEP file (AP214, one solid per tile at
-  its world position) for editing in a CAD tool:
-  `python3 scripts/hemisphere_step.py` writes
-  `dataflow.out/step/hemisphere-north.step` (sample density and hemisphere
-  are parameters; the default 5-degree sampling keeps the file compact).
+- The interior solid with the through-bore is dropped. The tile set can be
+  exported as STEP (AP214) with `make step` (`scripts/tiles_step.py`) for
+  editing in a CAD tool such as OnShape:
+  - `dataflow.out/step/tiles-all.step` — all 42 tiles in **assembled
+    orientation** (each solid at its world position in the globe, with its
+    own local frame, exactly as it sits when the printed tiles are glued),
+    as one product holding 42 separately named solids, so a CAD import
+    gives one part studio with 42 bodies in place;
+  - `dataflow.out/step/tiles/tile-<id>.step` — one file per tile, for
+    editing a single tile.
+  Millimetres are declared through the geometric representation context, so
+  CAD tools import at the right scale. `--hemisphere north|south` takes one
+  hemisphere and `--tile <id>` (repeatable) takes named tiles; the tiles
+  are meshed at 5 degrees by default because the STEP is a faceted B-rep
+  and a finer grid multiplies the file size.
 
 ## Assembly (current: support ring lattice)
 
@@ -243,13 +252,22 @@ of latitude and longitude; each tile is an STL file that:
   at z = 0, expected bounds, positive signed volume** via `make check`.
   Reason: these are the properties slicers rely on.
 - 2026-08-27 — **Ribs and between-tile alignment keys deleted; the assembly approach is under revision.** The reinforcing ribs (with the tile-to-ring underside sockets) and the wall fin/groove keys are removed from the tile build, the site (the rib page is gone) and this document; the previous state was tagged in git for reference. Row diameters of the base sphere (R = 100 mm) at the 0/30/60-degree rows are 200.0 / 173.2 / 100.0 mm.
-- 2026-08-27 — **Interior support dropped; the hemisphere is exported as
-  a STEP file (tiles only) instead.** The interior-solid-and-bore support
-  did not match what was wanted, so it is removed entirely; the tiles
-  remain the deliverable. A hemisphere (tiles only, one solid per tile at
-  its world position) is written as an AP214 STEP file
-  (`scripts/hemisphere_step.py`) for editing in OnShape or FreeCAD, with
-  the sample density parameterized to keep the file size practical.
+- 2026-08-27 — **Interior support dropped; the tiles are exported as a
+  STEP file instead.** The interior-solid-and-bore support did not match
+  what was wanted, so it is removed entirely; the tiles remain the
+  deliverable. An AP214 STEP file with one solid per tile at its world
+  position is written for editing in OnShape or FreeCAD, with the sample
+  density parameterized to keep the file size practical.
+- 2026-09-23 — **STEP export: the whole tile set, in assembly, with
+  millimetre units** (`make step`, `scripts/tiles_step.py`). Reason: the
+  request was for STEP files of all tiles in their assembled orientation
+  for OnShape. The earlier exporter wrote one hemisphere with no unit
+  context, so a CAD import could land at the wrong scale; the rewritten
+  writer declares a millimetre geometric representation context and puts
+  every solid in one product (a part studio with 42 placed bodies), and
+  also writes a file per tile. `tests/06-step-export.sh` walks the STEP
+  reference graph and checks that each solid sits inside its own tile's
+  patch of the globe.
 - 2026-09-23 — **Support: horizontal rings keyed into the tile centres,
   vertical meridian arcs keyed into the rings** (the user's plan). Reason:
   the support must print on a 220 mm bed while the assembled globe is
