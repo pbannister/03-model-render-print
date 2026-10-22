@@ -10,43 +10,43 @@ and prints on a 3D printer.
 
 ## Requirements
 
-- `scripts/stl-tiles-build.sh` must render the tile set into
+- `STL-TILES-R001` — `scripts/stl-tiles-build.sh` must render the tile set into
   `dataflow.out/stl/` from the ETOPO 2022 source tiles
   (`/datasets/dataset-etopo-2022/`, read-only).
-- The globe surface must be divided into tiles along latitude and longitude
+- `STL-TILES-R002` — The globe surface must be divided into tiles along latitude and longitude
   lines; tiles in the same latitude band must have roughly equal surface
   area (longitude split scales by the cosine of the band's mid latitude).
-- The highest and lowest latitude bands must each be a single round tile
+- `STL-TILES-R003` — The highest and lowest latitude bands must each be a single round tile
   (the polar caps, spanning the full 360 degrees of longitude).
-- Each tile must have a flat bottom that sits against the printer bed; the
+- `STL-TILES-R004` — Each tile must have a flat bottom that sits against the printer bed; the
   STL's z = 0 is the bed plane.
-- Each tile must be a watertight solid (every edge shared by exactly two
+- `STL-TILES-R005` — Each tile must be a watertight solid (every edge shared by exactly two
   triangles), so slicers accept it.
-- Each tile must mate with its neighbors along the top surface: the top
+- `STL-TILES-R006` — Each tile must mate with its neighbors along the top surface: the top
   surface is the spherical surface of the globe at radius R with elevation
   relief, and neighboring tiles sample the same geographic boundary.
-- The side walls must be chamfered so each wall plane contains the globe
+- `STL-TILES-R007` — The side walls must be chamfered so each wall plane contains the globe
   center, so the walls of assembled neighbors are coplanar.
-- Alignment keys: north and east walls carry vertical fins, south and west
+- `STL-TILES-R008` — Alignment keys: north and east walls carry vertical fins, south and west
   walls carry vertical grooves, polar-cap rings carry grooves; a fin is
   placed only when its mating groove exists, so every fin meets a groove
   in the assembled globe. The keys must be vertical (running from the top
   edge down the wall) so they print without supports.
-- The underside must carry an engraved (recessed) tile id; z = 0 must stay
+- `STL-TILES-R009` — The underside must carry an engraved (recessed) tile id; z = 0 must stay
   the lowest plane.
-- Elevation must be mapped with a global (not per-tile) range, so all tiles
+- `STL-TILES-R010` — Elevation must be mapped with a global (not per-tile) range, so all tiles
   share the same absolute scale.
-- Output format: binary STL, millimeters.
-- `scripts/stl-tiles-build.sh --check` must validate every generated tile
+- `STL-TILES-R011` — Output format: binary STL, millimeters.
+- `STL-TILES-R012` — `scripts/stl-tiles-build.sh --check` must validate every generated tile
   (watertight, flat bottom at z = 0, expected bounds, positive signed
   volume) without rebuilding.
-- The build must write `dataflow.out/stl/manifest.json`: parameters,
+- `STL-TILES-R013` — The build must write `dataflow.out/stl/manifest.json`: parameters,
   tile list with bounds and sizes, and provenance (dataset, script,
   timestamp, git commit).
-- The build must support rendering a subset: `--tiles <ids>` (specific
+- `STL-TILES-R014` — The build must support rendering a subset: `--tiles <ids>` (specific
   tiles) and `--region <south> <north> <west> <east>` (tiles intersecting a
   geographic region).
-- Derived output (`dataflow.out/stl/`) is generated and must not be edited
+- `STL-TILES-R015` — Derived output (`dataflow.out/stl/`) is generated and must not be edited
   by hand.
 
 ## Behavior
@@ -56,6 +56,10 @@ and prints on a 3D printer.
 - Re-running the script overwrites existing tiles.
 
 ## Dependencies
+
+None. This feature depends on no other feature.
+
+## External Inputs
 
 - Tool-gated: GDAL 3.8+ and Python 3 with the `osgeo` and `numpy` modules,
   plus the ETOPO source tiles under `/datasets` on the owning host.

@@ -38,7 +38,7 @@ This example shows the worked Site Build feature as an episode.
 It is illustrative; it is not dispatched as-is.
 
 ## EPISODE-GOAL
-Implement the Site Build feature from `prompts/features/01-site-build.md`.
+Implement the Site Build feature.
 
 ## EPISODE-ACCEPTANCE
 - Does `scripts/site-build.sh` generate `site.out/` from `site.in/`?

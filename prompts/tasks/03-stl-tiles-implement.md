@@ -2,6 +2,14 @@
 
 ## TASK-DESCRIPTION
 
+- Modify: `scripts/stl-tiles-build.sh`
+- Modify: `scripts/stl_tiles_build.py`
+- Modify: `tests/03-stl-tiles-build.sh`
+- Modify: `tests/04-stl-tiles-math.sh`
+- Modify: `Makefile`
+- Modify: `scripts/site-state-fetch.sh`
+- Modify: `TODO.md`
+
 Implement feature `prompts/features/03-stl-tiles.md` (STL Tiles) in
 `scripts/stl-tiles-build.sh` plus a Python module `scripts/stl_tiles_build.py`
 that the script drives.
@@ -10,6 +18,13 @@ The build renders the Earth's surface from the ETOPO 2022 source tiles
 (`/datasets/dataset-etopo-2022/`, read-only) into watertight binary-STL
 tiles in `dataflow.out/stl/` with a manifest, a `--check` validation mode,
 and subset rendering (`--tiles`, `--region`).
+
+## TASK-OUTPUT
+
+- Implement the files, then run `make build`, `make check`, and `make test`
+  from the repository root.
+- Report the tile counts, sizes, and verification results.
+- End with the `VERIFICATION:` line.
 
 ## TASK-CONTEXT
 
@@ -32,16 +47,26 @@ and subset rendering (`--tiles`, `--region`).
 
 ## TASK-FILES
 
-- `create scripts/stl-tiles-build.sh`
-- `create scripts/stl_tiles_build.py`
-- `create tests/03-stl-tiles-build.sh`
-- `create tests/04-stl-tiles-math.sh`
-- `modify Makefile` (wire `build` and `check` targets)
-- `modify scripts/site-state-fetch.sh` (STL tile state keys for the dashboard)
-- `modify TODO.md` (mark the STL tile tasks complete after verification)
+| Operation | Path |
+|---|---|
+| modify | `scripts/stl-tiles-build.sh` |
+| modify | `scripts/stl_tiles_build.py` |
+| modify | `tests/03-stl-tiles-build.sh` |
+| modify | `tests/04-stl-tiles-math.sh` |
+| modify | `Makefile` |
+| modify | `scripts/site-state-fetch.sh` |
+| modify | `TODO.md` |
 
-## TASK-OUTPUT
+## TASK-VERIFY
+- Run: `make build`, `make check`, and `make test` from the repository root.
+- Expected: exit status 0 from each.
 
-- Implement the files, then run `make build`, `make check`, and `make test`
-  from the repository root.
-- Report the tile counts, sizes, and verification results.
+## TASK-FEATURES
+- `prompts/features/03-stl-tiles.md`
+
+## TASK-ACCEPTANCE
+- `STL-TILES-R001`
+- `STL-TILES-R002`
+- `STL-TILES-R003`
+
+OUTPUT: the implemented files, the tile counts and sizes, and the verification results, ending with the `VERIFICATION:` line.

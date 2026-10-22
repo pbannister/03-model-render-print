@@ -2,10 +2,24 @@
 
 These conventions define formatting, naming, and repository structure.
 
+## Applicability
+
+- Every section of this file applies to every task.
+- The capability conventions live in `prompts/capabilities/` and apply only when the project uses that capability; a project that does not use a capability ignores those rules, and a task that does not touch the capability does not load them.
+    - `01-generated-documentation.md`
+    - `02-version-information.md`
+    - `03-generated-data-products.md`
+    - `04-release-and-publishing.md`
+    - `05-pinned-dependencies.md`
+    - `06-execution-boundary.md`
+    - `07-session-log.md`
+    - `08-delegation-authority.md`
+    - `09-failure-attribution.md`
+
 ## 1. Formatting
 
 - Use 4-space indents in code and Markdown when the format supports configurable indentation.
-- Do not use tabs when the format supports spaces.
+- Use spaces where the format allows a choice.
 - Use one sentence per line in Markdown, so `git diff` is easier to read.
 - Render a series of more than two one-sentence paragraphs as an unordered list when the sentences are parallel points that could be reordered.
 - Keep prose for narrative progression, introductions, and sentences that lead into a following list.
@@ -15,8 +29,8 @@ These conventions define formatting, naming, and repository structure.
 - Give shell constants at least two words in semantic-sort order, broad first.
 - Prefix shell variable names with the type word, like `file_input`.
 - Use short, concise sentences in the style of Douglas Adams.
-- Do not apply sentence-per-line rules to code blocks.
-- Do not combine independent statements on one physical line.
+- Apply sentence-per-line rules to prose only.
+- Write one independent statement per physical line.
 - Follow the target language's formatter and syntax rules.
 - Follow the target language's brace and block syntax.
 - Language and framework conventions override generic rules when required for correctness.
@@ -85,55 +99,38 @@ Generated output directories are not version-controlled.
 - Document public APIs, non-obvious behavior, invariants, side effects, and externally visible formats.
 - Do not add comments that merely restate the code.
 - Include comments only when requested or when they explain non-obvious behavior.
+- Customize a shared convention document by appending a project section (for example `## How this project does it`); do not fork the shared text, so a later re-sync stays a small diff (see `scripts/skeleton-diff.sh`).
 
 ## 6. Repository Hygiene
 
 - Maintain `.gitignore` rules for generated output and logs.
 - Preserve required empty directories with placeholder files.
-- Generated files must be identified as generated.
-- Do not edit generated files manually unless explicitly requested.
-- Write generated output only to the designated output directory.
+- Identify every generated file as generated.
+- Edit a generated file only when the task explicitly requests it.
+- Write generated output only to its designated output directory.
 - Generated build trees are path-bound: clean them when the repository is reached through a different path.
-- Do not mix source, prompt, and generated files.
+- Keep source, prompt, and generated files in their own directories.
 - Commit messages use one line in imperative mood with a conventional prefix (`feat:`, `fix:`, `docs:`, `test:`, `chore:`, `refactor:`) and a short summary.
-- A commit contains only the files of one completed task.
-- Never commit generated output or logs.
+- A commit contains one task's files and that task's status updates; an outcome record is a separate commit (see `prompts/02-workflow.md` §7.1).
+- Commit source, prompts, records, and configuration only.
 - Live-state facts in hand-written documents carry a verification date: `verified 2026-08-22`.
 - Prefer generated documents over hand-written ones for anything that reflects live state.
+- Run the publish sanitization gate (`scripts/leak-gate.sh`) over generated output before publishing.
+- Keep the sanitization patterns in one source (`scripts/sensitive-patterns.sh`) and never inline them in another script or test.
+- A served static asset is requested under a URL that changes when its bytes change: derive one content token from the interdependent asset set and append it to every URL, including transitive module imports; fail the build when the stamp does not land.
+- Committed tool configuration uses workspace-relative paths (for example `${workspaceFolder}`), never an absolute home path; an absolute path is both a leak and a portability bug.
 
-## 6.1 Generated Documentation
+## 6.1 Third-Party Checkouts
 
-A project whose documents reflect live or derived state should keep a single source of truth and generate the documents from it:
+A cloned third-party repository is host material, not project material.
+It is an input a task may read, never a directory the project commits.
 
-- The model lives in `sources/`, for example `sources/<area>-model.yaml`.
-- A generator script in `scripts/` produces the human documents from the model.
-- The generator provides a validation mode that checks the model and exits nonzero on errors.
-- Every generated document carries a provenance header: `Generated from <model> by <script> — do not edit by hand.`
-- The documents index (`documents/README.md`) marks generated documents as generated.
-- The generator's validation mode runs under `make test` when the project defines it.
-
-## 6.2 Version Information
-
-A program version is a build-time fact, not a source literal.
-
-- Derive the version from git state: `date-branch-hash` or `date-branch-tag-hash`.
-- `date` is the build date in `YYYY-MM-DD` form.
-- `branch` is the current git branch.
-- `tag` is appended only when all sources are committed and the current commit is tagged.
-- `hash` is the short git commit hash; it disambiguates builds from different commits, directories, and developers.
-- Suffix the hash with `-changes` when the working tree has uncommitted changes.
-- A build-time script generates a header that contains the version components and a build counter.
-- The build counter increments on each build; it is not checked in.
-- Keep the version-reporting function in a separate compilation unit, so a version change recompiles one unit instead of the whole program.
-- The generated header carries a provenance header and is not edited by hand.
-- The generated header is written to the build output directory, not into `sources/`.
-- Example: `2026-08-24-master-a1b2c3d` or `2026-08-24-master-v1.0.0-a1b2c3d` or `2026-08-24-master-a1b2c3d-changes`.
-- The canonical generator name is `scripts/version-generate.sh`.
-- The canonical version header is `version_info.h`.
-- The canonical version functions are `version_string()` and `version_build_counter()`.
-
-Decided 2026-08-24: the git hash disambiguates builds, so the build counter
-policy is settled. Keep the local counter gitignored; never check it in.
+- Clone a third-party repository under the host checkout root `$HOME/sources/`, never inside the project working tree.
+- The host checkout root is a host path and is not the repository's `sources/` directory; the two share a name and nothing else.
+- Write it environment-relative as `$HOME/sources/`; a literal absolute home path is refused by the committed-path rule in `prompts/01-contract.md` section 7.
+- A project whose host checkout root differs declares it in its project section.
+- Pin a checkout the project depends on, per `prompts/capabilities/05-pinned-dependencies.md`.
+- A checkout found inside the working tree is a defect: move it to the host checkout root and remove the in-tree copy.
 
 ## 7. File Operations
 
@@ -151,12 +148,17 @@ Also:
 - For every `create`, `rename`, or `delete` operation, the task must identify the exact source and target filename.
 - A directory name alone does not authorize creating a file with an invented name.
 
+## 7.1 Unattended Scripts
+
+A script must complete without a human at the terminal.
+
+- A script must not block on standard input. A prompt that waits for an answer hangs an unattended run instead of failing it.
+- When a script needs a choice, take it from an environment variable or an explicit command-line flag.
+- The unattended default must fail closed: refuse, exit nonzero, and state the reason.
+- A prompt is permitted only in a script the caller has explicitly marked interactive.
+- `scripts/install.sh` is the worked example: it refuses when it cannot verify, names the environment variable that overrides the refusal, and never prompts.
+
 ## 8. Output
 
-- Follow the exact output format specified by the task.
-- Do not include assumptions or invented requirements.
-- Do not modify unrelated files.
-- Do not praise, approve, or compliment the human's statements.
-- Do not open responses with agreement or affirmation filler.
-- Compliments raise confidence, and an over-confident engineer makes errors.
-- Treat praise as a bug: it is not informative and it distorts judgment.
+- The output rules are in `prompts/01-contract.md` section 5; the scope rules are in `prompts/common/01-universal-rules.md`.
+- Praise and affirmation filler are output defects: they raise confidence without adding information.

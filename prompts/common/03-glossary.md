@@ -6,11 +6,8 @@
 
 ## DELTA protocol
 
-- DELTA applies minimal corrections.
-- A DELTA applies to the immediately preceding assistant output unless another artifact is identified.
-- A DELTA changes only the named portions.
-- A DELTA does not regenerate full output unless explicitly requested.
-- If a DELTA cannot be applied without changing additional portions, clarification is required.
+- A DELTA is a minimal correction applied to a preceding output.
+- The rules for applying one are defined in `prompts/01-contract.md` section 6; this entry defines the term only.
 
 ## Universal failure-prevention rules
 
